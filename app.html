@@ -668,9 +668,13 @@ async function igSync(silent){
   syncing = true; $("#igBtn").classList.add("spin");
   try{
     const tok = encodeURIComponent(ig.token);
-    const me = await igGet(`${IG}/me?fields=username&access_token=${tok}`);
+    // Tokens aus dem Unified Login (Facebook-Schlüssel, beginnen mit „EAA“) laufen über graph.facebook.com und brauchen die Konto-ID
+    const fb = ig.token.startsWith("EAA");
+    if(fb && !ig.igId) throw new Error("Bitte die Instagram-Konto-ID eintragen (die lange Zahl unter deinem Namen bei Meta).");
+    const base = fb ? "https://graph.facebook.com/v21.0" : IG, who = fb ? encodeURIComponent(ig.igId) : "me";
+    const me = await igGet(`${base}/${who}?fields=username&access_token=${tok}`);
     ig.user = me.username;
-    let url = `${IG}/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,children{media_type,media_url,thumbnail_url}&limit=50&access_token=${tok}`;
+    let url = `${base}/${who}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,children{media_type,media_url,thumbnail_url}&limit=50&access_token=${tok}`;
     const items = [];
     for(let page = 0; page < 30 && url; page++){
       const j = await igGet(url);
@@ -695,7 +699,7 @@ async function igSync(silent){
 
 async function igRefresh(){
   const ig = state.ig;
-  if(!ig || !ig.token || Date.now() - (ig.tokenAt || 0) < 3 * DAY) return;
+  if(!ig || !ig.token || ig.token.startsWith("EAA") || Date.now() - (ig.tokenAt || 0) < 3 * DAY) return;
   try{
     const j = await igGet(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(ig.token)}`);
     ig.token = j.access_token; ig.tokenAt = Date.now(); ig.exp = Date.now() + (j.expires_in || 60 * 86400) * 1000;
@@ -720,7 +724,7 @@ function igDialog(){
       <p id="igInfo"></p><p class="err" id="igErr"></p>
       <div class="actions" style="padding:0"><button class="btn primary" id="igSyncNow">Jetzt synchronisieren</button><button class="btn" id="igClose">Schließen</button></div>
       <button class="linkbtn" id="igOff" style="justify-self:start">Verbindung trennen</button></div>`;
-    back.querySelector("#igInfo").textContent = `Verbunden als @${ig.user || "…"} · zuletzt aktualisiert: ${t(ig.lastSync)} · Schlüssel gültig bis ${ig.exp ? new Date(ig.exp).toLocaleDateString("de-AT") : "?"} (verlängert sich automatisch, wenn du die App öffnest).`;
+    back.querySelector("#igInfo").textContent = `Verbunden als @${ig.user || "…"} · zuletzt aktualisiert: ${t(ig.lastSync)} · ${ig.exp ? `Schlüssel gültig bis ${new Date(ig.exp).toLocaleDateString("de-AT")} (verlängert sich automatisch, wenn du die App öffnest).` : "Schlüssel ohne Ablaufdatum."}`;
     back.querySelector("#igErr").textContent = ig.error || "";
     back.querySelector("#igClose").onclick = close;
     back.querySelector("#igSyncNow").onclick = async () => { const ok = await igSync(false); if(ok) close(); else back.querySelector("#igErr").textContent = state.ig.error; };
@@ -738,17 +742,23 @@ function igDialog(){
         <li>Bei <b>„Zugriffsschlüssel generieren“</b> auf <b>„Konto hinzufügen“</b> tippen und mit deinem Instagram-Konto einloggen.<br>Kommt eine Tester-Einladung: <a href="https://www.instagram.com/accounts/manage_access/" target="_blank" rel="noopener">hier annehmen ↗</a> (Reiter „Tester-Einladungen“), dann nochmal „Konto hinzufügen“.</li>
         <li>Neben deinem Konto auf <b>„Token generieren“</b>, kopieren und hier einfügen:</li>
       </ol>
-      <input id="igToken" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Token einfügen (beginnt meist mit IG…)" aria-label="Instagram-Token">
+      <input id="igToken" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Token einfügen" aria-label="Instagram-Token">
+      <label class="check" for="igId" id="igIdWrap" hidden style="display:grid;gap:4px">Dein Token beginnt mit „EAA“. Dann braucht die App noch die Instagram-Konto-ID, die lange Zahl unter deinem Namen bei Meta:
+        <input id="igId" inputmode="numeric" autocomplete="off" placeholder="z. B. 1784…" aria-label="Instagram-Konto-ID"></label>
       <label class="check" for="igReplace"><input type="checkbox" id="igReplace" checked> Von Hand hinzugefügte gepostete Bilder durch die echten Instagram-Posts ersetzen</label>
       <p class="err" id="igErr"></p>
       <div class="actions" style="padding:0"><button class="btn primary" type="submit" id="igGo">Verbinden</button><button class="btn" type="button" id="igClose">Abbrechen</button></div></form>`;
     back.querySelector("#igClose").onclick = close;
+    const tokIn = back.querySelector("#igToken");
+    tokIn.addEventListener("input", () => { back.querySelector("#igIdWrap").hidden = !tokIn.value.trim().startsWith("EAA"); });
     back.querySelector("form").onsubmit = async e => {
       e.preventDefault();
       const tok = back.querySelector("#igToken").value.trim(), err = back.querySelector("#igErr"), go = back.querySelector("#igGo");
       if(tok.length < 20){ err.textContent = "Das sieht nicht nach einem Token aus. Bitte den ganzen Schlüssel kopieren."; return; }
       go.disabled = true; go.textContent = "Verbinde …"; err.textContent = "";
-      state.ig = {token: tok, tokenAt: Date.now(), exp: Date.now() + 60 * DAY, replaceManual: back.querySelector("#igReplace").checked};
+      const igId = back.querySelector("#igId").value.replace(/\D/g, "");
+      if(tok.startsWith("EAA") && !igId){ err.textContent = "Bitte noch die Instagram-Konto-ID eintragen."; go.disabled = false; go.textContent = "Verbinden"; return; }
+      state.ig = {token: tok, igId, tokenAt: Date.now(), exp: tok.startsWith("EAA") ? 0 : Date.now() + 60 * DAY, replaceManual: back.querySelector("#igReplace").checked};
       const ok = await igSync(false);
       if(ok){ close(); toast(`Verbunden mit @${state.ig.user}`); }
       else{ err.textContent = (state.ig && state.ig.error) || "Verbindung fehlgeschlagen."; state.ig = null; save(); renderStats(); go.disabled = false; go.textContent = "Verbinden"; }
