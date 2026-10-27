@@ -662,16 +662,37 @@ function mergeIg(items, complete){
   return {added: fresh.length, matched: done.length};
 }
 
+// Tokens aus dem Unified Login beginnen mit „EAA“. Je nach Konfiguration klappt der Zugriff über einen anderen Weg,
+// daher der Reihe nach probieren und den funktionierenden merken.
+async function resolveTarget(ig){
+  if(!ig.token.startsWith("EAA")) return {base: IG, who: "me"};
+  if(ig.base && ig.who) return {base: ig.base, who: ig.who};
+  const FB = "https://graph.facebook.com/v21.0", tok = encodeURIComponent(ig.token), tries = [];
+  // „Ungültiger Token“ (190) ist nur bei Facebook endgültig; graph.instagram.com lehnt EAA-Tokens ggf. genauso ab
+  const attempt = async (label, fn, fatal = true) => {
+    try{ return await fn(); }
+    catch(e){ if(fatal && e.code === 190) throw e; tries.push(`${label}: ${e.message}`); return null; }
+  };
+  let r = await attempt("Instagram-Login", async () => { await igGet(`${IG}/me?fields=username&access_token=${tok}`); return {base: IG, who: "me"}; }, false);
+  if(!r && ig.igId) r = await attempt("Konto-ID", async () => { await igGet(`${FB}/${encodeURIComponent(ig.igId)}?fields=username&access_token=${tok}`); return {base: FB, who: encodeURIComponent(ig.igId)}; });
+  if(!r) r = await attempt("Facebook-Seite", async () => {
+    const j = await igGet(`${FB}/me/accounts?fields=instagram_business_account&access_token=${tok}`);
+    const a = (j.data || []).find(x => x.instagram_business_account);
+    if(!a) throw new Error("keine Facebook-Seite mit Instagram-Konto gefunden");
+    return {base: FB, who: a.instagram_business_account.id};
+  });
+  if(!r) throw new Error("Meta erlaubt mit diesem Token keinen Zugriff auf deine Posts. Antworten: " + tries.join(" · "));
+  ig.base = r.base; ig.who = r.who;
+  return r;
+}
+
 async function igSync(silent){
   const ig = state.ig;
   if(!ig || !ig.token || syncing) return false;
   syncing = true; $("#igBtn").classList.add("spin");
   try{
     const tok = encodeURIComponent(ig.token);
-    // Tokens aus dem Unified Login (Facebook-Schlüssel, beginnen mit „EAA“) laufen über graph.facebook.com und brauchen die Konto-ID
-    const fb = ig.token.startsWith("EAA");
-    if(fb && !ig.igId) throw new Error("Bitte die Instagram-Konto-ID eintragen (die lange Zahl unter deinem Namen bei Meta).");
-    const base = fb ? "https://graph.facebook.com/v21.0" : IG, who = fb ? encodeURIComponent(ig.igId) : "me";
+    const {base, who} = await resolveTarget(ig);
     const me = await igGet(`${base}/${who}?fields=username&access_token=${tok}`);
     ig.user = me.username;
     let url = `${base}/${who}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,children{media_type,media_url,thumbnail_url}&limit=50&access_token=${tok}`;
@@ -757,7 +778,6 @@ function igDialog(){
       if(tok.length < 20){ err.textContent = "Das sieht nicht nach einem Token aus. Bitte den ganzen Schlüssel kopieren."; return; }
       go.disabled = true; go.textContent = "Verbinde …"; err.textContent = "";
       const igId = back.querySelector("#igId").value.replace(/\D/g, "");
-      if(tok.startsWith("EAA") && !igId){ err.textContent = "Bitte noch die Instagram-Konto-ID eintragen."; go.disabled = false; go.textContent = "Verbinden"; return; }
       state.ig = {token: tok, igId, tokenAt: Date.now(), exp: tok.startsWith("EAA") ? 0 : Date.now() + 60 * DAY, replaceManual: back.querySelector("#igReplace").checked};
       const ok = await igSync(false);
       if(ok){ close(); toast(`Verbunden mit @${state.ig.user}`); }
