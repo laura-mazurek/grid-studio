@@ -120,6 +120,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .dialog .stackbtns{display:grid;gap:6px}
 .dialog a.btn{text-align:center;text-decoration:none;color:var(--ink)}
 .tile.hidden{opacity:.35}
+.tile .pin{position:absolute;left:5px;top:5px;width:22px;height:22px;border-radius:50%;background:rgba(18,17,22,.75);display:grid;place-items:center}
+.tile .pin svg{width:13px;height:13px}
 .tile .eye{position:absolute;right:5px;bottom:5px;background:rgba(18,17,22,.75);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px}
 .feedfoot{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;padding:12px 8px 4px}
 .feedfoot .addposted{margin:0}
@@ -327,7 +329,8 @@ function orderOf(l){
   return out;
 }
 function viewPosts(){
-  const all = allViewPosts();
+  const base = allViewPosts();
+  const all = [...base.filter(p => p.pinned).sort((a, b) => b.pinned - a.pinned), ...base.filter(p => !p.pinned)];
   return showHidden ? all : all.filter(p => !p.hidden);
 }
 function allViewPosts(){
@@ -391,8 +394,19 @@ function viewDialog(l){
   if(l.id === "ig"){
     back.innerHTML = `<div class="dialog wide"><b>Instagram-Reihenfolge</b>
       <p>Hier liegt dein Profil so, wie es in Instagram wirklich aussieht. Instagram gibt die umsortierte Reihenfolge nicht heraus, deshalb schiebst du sie hier einmal zurecht. Neue Posts kommen beim Sync automatisch oben dazu.</p>
-      <div class="stackbtns"><button class="btn" id="vDate">Nach Datum ordnen<small>Gepostete Bilder neu nach Datum, geplante bleiben oben</small></button>
+      <div class="stackbtns"><button class="btn primary" id="vCopy">Als neue Version kopieren<small>Startet mit genau dieser Reihenfolge</small></button>
+      ${state.layouts.filter(x => x.id !== "ig").map(x => `<button class="btn" data-into="${x.id}">In „${x.name.replace(/[<>&"]/g, "")}“ kopieren<small>Überschreibt die Reihenfolge dieser Version</small></button>`).join("")}
+      <button class="btn" id="vDate">Nach Datum ordnen<small>Gepostete Bilder neu nach Datum, geplante bleiben oben</small></button>
       <button class="btn" id="vClose">Schließen</button></div></div>`;
+    back.querySelector("#vCopy").onclick = () => {
+      const c = {id: uid(), name: "Version " + state.layouts.length, order: orderOf(l).map(p => p.id)};
+      state.layouts.push(c); state.view = c.id; save(); renderViews(); renderGrid(); close(); toast(`„${c.name}“ angelegt`);
+    };
+    back.querySelectorAll("[data-into]").forEach(b => b.onclick = () => {
+      const t = layout(b.dataset.into);
+      if(!b.dataset.armed){ b.dataset.armed = "1"; b.firstChild.textContent = "Sicher? Nochmal tippen"; return; }
+      t.order = orderOf(l).map(p => p.id); state.view = t.id; save(); renderViews(); renderGrid(); close(); toast(`In „${t.name}“ kopiert`);
+    });
     back.querySelector("#vDate").onclick = () => {
       const planned = orderOf(l).filter(p => p.status === "planned");
       l.order = [...planned, ...state.posts.filter(p => p.status !== "planned").sort(byDate)].map(p => p.id);
@@ -433,7 +447,8 @@ function postMenu(p){
   back.addEventListener("click", e => { if(e.target === back) close(); });
   back.innerHTML = `<div class="dialog wide"><b>Geposteter Beitrag</b><p id="pmCap"></p>
     <div class="stackbtns">
-      <button class="btn primary" id="pmHide"></button>
+      <button class="btn primary" id="pmPin"></button>
+      <button class="btn" id="pmHide"></button>
       ${p.permalink ? '<a class="btn" id="pmOpen" target="_blank" rel="noopener">In Instagram ansehen ↗</a>' : ""}
       ${p.igId ? "" : '<button class="btn warn" id="pmDel">Aus Grid Studio entfernen</button>'}
       <button class="btn" id="pmClose">Schließen</button>
@@ -442,6 +457,12 @@ function postMenu(p){
   const hb = back.querySelector("#pmHide");
   hb.innerHTML = p.hidden ? "Wieder im Grid zeigen" : "Im Grid ausblenden<small>z. B. Reels, die nicht im Raster erscheinen. Gilt für alle Ansichten.</small>";
   hb.onclick = () => { p.hidden = !p.hidden; save(); renderGrid(); close(); toast(p.hidden ? "Ausgeblendet" : "Wieder eingeblendet"); };
+  const pb = back.querySelector("#pmPin");
+  pb.innerHTML = p.pinned ? "Fixierung lösen" : "Oben fixieren<small>Wie „Anpinnen“ in Instagram, max. 3. Gilt für alle Ansichten.</small>";
+  pb.onclick = () => {
+    if(!p.pinned && state.posts.filter(x => x.pinned).length >= 3) return toast("Instagram erlaubt maximal 3 fixierte Posts");
+    p.pinned = p.pinned ? 0 : Date.now(); save(); renderGrid(); close(); toast(p.pinned ? "Fixiert" : "Fixierung gelöst");
+  };
   if(p.permalink) back.querySelector("#pmOpen").href = p.permalink;
   const del = back.querySelector("#pmDel");
   if(del) del.onclick = () => {
@@ -525,6 +546,7 @@ function renderGrid(){
       }
       t.addEventListener("click", () => openSheet(p.id));
     }else t.addEventListener("click", () => postMenu(p));
+    if(p.pinned) t.insertAdjacentHTML("beforeend", '<span class="pin" title="Fixiert"><svg viewBox="0 0 24 24" fill="#fff"><path d="M15 3l6 6-3 1-4 4 1 5-2 2-4-4-5 5-1-1 5-5-4-4 2-2 5 1 4-4z"/></svg></span>');
     if(p.hidden){ t.classList.add("hidden"); t.insertAdjacentHTML("beforeend", '<span class="eye">ausgeblendet</span>'); }
     grid.appendChild(t);
   });
