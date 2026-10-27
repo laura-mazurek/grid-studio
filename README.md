@@ -12,3 +12,10 @@ GitHub → Settings → Pages → „Deploy from a branch“ → Branch `main`, 
 Danach läuft die App unter https://laura-mazurek.github.io/grid-studio/
 
 Am iPhone in Safari öffnen → Teilen → „Zum Home-Bildschirm“.
+
+## Instagram-Sync
+
+Instagram-Symbol oben rechts → Schritte im Dialog folgen → Token einfügen.
+Die App lädt dann alle Posts (Business- oder Creator-Konto nötig), prüft beim Öffnen auf neue Posts,
+ersetzt geplante Entwürfe mit gleichem Caption-Anfang durch den echten Post und verlängert den Schlüssel selbst.
+Der Schlüssel wird nur im Browser auf deinem Gerät gespeichert.
