@@ -686,9 +686,11 @@ async function resolveTarget(ig){
   let r = await attempt("Instagram-Login", async () => { await igGet(`${IG}/me?fields=username&access_token=${tok}`); return {base: IG, who: "me"}; }, false);
   if(!r && ig.igId) r = await attempt("Konto-ID", async () => { await igGet(`${FB}/${encodeURIComponent(ig.igId)}?fields=username&access_token=${tok}`); return {base: FB, who: encodeURIComponent(ig.igId)}; });
   if(!r) r = await attempt("Facebook-Seite", async () => {
-    const j = await igGet(`${FB}/me/accounts?fields=instagram_business_account&access_token=${tok}`);
+    const j = await igGet(`${FB}/me/accounts?fields=instagram_business_account,access_token&access_token=${tok}`);
     const a = (j.data || []).find(x => x.instagram_business_account);
     if(!a) throw new Error("keine Facebook-Seite mit Instagram-Konto gefunden");
+    // Seiten-Token aus einem verlängerten Nutzer-Token läuft nicht ab, also diesen merken
+    if(a.access_token) ig.token = a.access_token;
     return {base: FB, who: a.instagram_business_account.id};
   });
   if(!r) throw new Error("Meta erlaubt mit diesem Token keinen Zugriff auf deine Posts. Antworten: " + tries.join(" · "));
