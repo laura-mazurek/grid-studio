@@ -126,6 +126,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .views button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--bg)}
 .views .add{border-style:dashed;color:var(--accent)}
 .dialog .stackbtns{display:grid;gap:6px}
+.dialog a.btn{text-align:center;text-decoration:none;color:var(--ink)}
+.tile.hidden{opacity:.35}
+.tile .eye{position:absolute;right:5px;bottom:5px;background:rgba(18,17,22,.75);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px}
+.feedfoot{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;padding:12px 8px 4px}
+.feedfoot .addposted{margin:0}
+.views .exp{color:var(--ink)}
 .dialog .stackbtns small{display:block;font-weight:400;color:var(--muted);font-size:11px}
 .iconbtn{border:0;background:var(--chip);width:32px;height:32px;border-radius:10px;display:grid;place-items:center;padding:0;position:relative}
 .iconbtn svg{width:18px;height:18px}
@@ -160,7 +166,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 
   <div class="feed" id="feed">
     <div class="grid" id="grid"></div>
-    <button class="addposted" id="addPosted">＋ Bereits gepostete Bilder hinzufügen</button>
+    <div class="feedfoot">
+      <button class="addposted" id="addPosted">＋ Gepostete Bilder von Hand</button>
+      <button class="addposted" id="toggleHidden" hidden></button>
+    </div>
   </div>
 
   <div class="tray" id="tray">
@@ -233,7 +242,7 @@ document.addEventListener("visibilitychange", () => { if(document.visibilityStat
 /* ---------- Zustand ---------- */
 // posts[0] = oben links im Grid. slides[0] = Cover.
 let state = {albums: [], photos: {}, posts: [], current: null};
-let postingMode = false, openPost = null, selSlide = 0, gridSort = null;
+let postingMode = false, openPost = null, selSlide = 0, gridSort = null, showHidden = false;
 const thumbs = {};          // pid -> objectURL
 const fullURLs = {};        // pid -> objectURL (nur bei Bedarf)
 
@@ -301,9 +310,11 @@ function bg(el, pid, fx = .5, fy = .5){
 }
 
 function renderStats(){
-  const pl = state.posts.filter(p => p.status === "planned").length;
+  const pl = state.posts.filter(p => p.status === "planned").length, hid = state.posts.filter(p => p.hidden).length;
   const ig = state.ig;
-  $("#stats").textContent = `${ig && ig.user ? "@" + ig.user + " · " : ""}${pl} geplant · ${state.posts.length - pl} gepostet`;
+  $("#stats").textContent = `${ig && ig.user ? "@" + ig.user + " · " : ""}${pl} geplant · ${state.posts.length - pl - hid} gepostet`;
+  const th = $("#toggleHidden");
+  th.hidden = !hid; th.textContent = showHidden ? "Ausgeblendete verstecken" : `${hid} ausgeblendet · zeigen`;
   const dot = $("#igDot");
   dot.className = "dot" + (ig && ig.token ? (ig.error ? " bad" : " ok") : "");
 }
@@ -326,6 +337,10 @@ function orderOf(l){
   return out;
 }
 function viewPosts(){
+  const all = allViewPosts();
+  return showHidden ? all : all.filter(p => !p.hidden);
+}
+function allViewPosts(){
   if(state.view === "new"){
     const planned = orderOf(layout("ig")).filter(p => p.status === "planned");
     return [...planned, ...state.posts.filter(p => p.status !== "planned").sort(byDate)];
@@ -372,6 +387,10 @@ function renderViews(){
     toast(`„${l.name}“ angelegt, Kopie der bisherigen Ansicht`);
   };
   box.appendChild(add);
+  const ex = document.createElement("button");
+  ex.className = "exp"; ex.textContent = "⤓ Als Bild";
+  ex.onclick = exportGrid;
+  box.appendChild(ex);
   if(gridSort) gridSort.option("sort", state.view !== "new");
 }
 
@@ -418,6 +437,80 @@ function viewDialog(l){
   app.appendChild(back);
 }
 
+function postMenu(p){
+  const back = document.createElement("div"); back.className = "dialog-back";
+  const close = () => back.remove();
+  back.addEventListener("click", e => { if(e.target === back) close(); });
+  back.innerHTML = `<div class="dialog wide"><b>Geposteter Beitrag</b><p id="pmCap"></p>
+    <div class="stackbtns">
+      <button class="btn primary" id="pmHide"></button>
+      ${p.permalink ? '<a class="btn" id="pmOpen" target="_blank" rel="noopener">In Instagram ansehen ↗</a>' : ""}
+      ${p.igId ? "" : '<button class="btn warn" id="pmDel">Aus Grid Studio entfernen</button>'}
+      <button class="btn" id="pmClose">Schließen</button>
+    </div></div>`;
+  back.querySelector("#pmCap").textContent = (p.caption || "").slice(0, 120) || (p.when ? new Date(p.when).toLocaleDateString("de-AT") : "");
+  const hb = back.querySelector("#pmHide");
+  hb.innerHTML = p.hidden ? "Wieder im Grid zeigen" : "Im Grid ausblenden<small>z. B. Reels, die nicht im Raster erscheinen. Gilt für alle Ansichten.</small>";
+  hb.onclick = () => { p.hidden = !p.hidden; save(); renderGrid(); close(); toast(p.hidden ? "Ausgeblendet" : "Wieder eingeblendet"); };
+  if(p.permalink) back.querySelector("#pmOpen").href = p.permalink;
+  const del = back.querySelector("#pmDel");
+  if(del) del.onclick = () => {
+    if(!del.dataset.armed){ del.dataset.armed = "1"; del.textContent = "Sicher? Nochmal tippen"; return; }
+    state.posts = state.posts.filter(x => x !== p); save(); renderGrid(); close(); toast("Entfernt");
+  };
+  back.querySelector("#pmClose").onclick = close;
+  app.appendChild(back);
+}
+
+// Aktuelle Ansicht als JPEG (1080 px breit), zum Vergleichen am Handy
+function loadForCanvas(pid){
+  return new Promise(async res => {
+    const ph = state.photos[pid] || {};
+    const local = thumbs[pid] && !thumbs[pid].startsWith("http") ? thumbs[pid] : (await thumbURL(pid));
+    const src = local || ph.remote;
+    if(!src) return res(null);
+    const im = new Image();
+    if(src.startsWith("http")) im.crossOrigin = "anonymous";
+    im.onload = () => res(im); im.onerror = () => res(null);
+    im.src = src;
+  });
+}
+async function exportGrid(){
+  const list = viewPosts().filter(p => !p.hidden).slice(0, 45);
+  if(!list.length) return toast("Noch nichts im Grid");
+  toast("Bild wird erstellt …");
+  const W = 1080, gap = 4, tw = (W - 2 * gap) / 3, th = tw * 4 / 3, rows = Math.ceil(list.length / 3);
+  const c = document.createElement("canvas"); c.width = W; c.height = Math.round(rows * th + (rows - 1) * gap);
+  const g = c.getContext("2d"); g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, c.width, c.height);
+  let missing = 0;
+  const ims = await Promise.all(list.map(p => p.slides[0] ? loadForCanvas(p.slides[0].pid) : null));
+  list.forEach((p, i) => {
+    const x = (i % 3) * (tw + gap), y = Math.floor(i / 3) * (th + gap), im = ims[i], s = p.slides[0] || {fx: .5, fy: .5};
+    if(im){
+      const iw = im.naturalWidth, ih = im.naturalHeight, sc = Math.max(tw / iw, th / ih), sw = tw / sc, sh = th / sc;
+      g.drawImage(im, (iw - sw) * s.fx, (ih - sh) * s.fy, sw, sh, x, y, tw, th);
+    }else{ missing++; g.fillStyle = "#E4E2E8"; g.fillRect(x, y, tw, th); }
+    if(p.status === "planned"){ g.strokeStyle = "#2F6F62"; g.lineWidth = 8; g.strokeRect(x + 4, y + 4, tw - 8, th - 8); }
+  });
+  let blob;
+  try{ blob = await new Promise(r => c.toBlob(r, "image/jpeg", .9)); }catch(e){ blob = null; }
+  if(!blob) return toast("Export nicht möglich: Instagram erlaubt das Kopieren der Bilder nicht");
+  const name = (state.view === "new" ? "Neueste" : layout(state.view).name).replace(/[^\wäöüÄÖÜß -]/g, "");
+  const file = new File([blob], `Grid ${name} ${new Date().toISOString().slice(0, 10)}.jpg`, {type: "image/jpeg"});
+  if(missing) toast(`${missing} Bilder fehlen im Export (grau)`);
+  try{
+    if(navigator.canShare && navigator.canShare({files: [file]})){ await navigator.share({files: [file]}); return; }
+  }catch(e){ if(e && e.name === "AbortError") return; }
+  const u = URL.createObjectURL(file), ov = document.createElement("div"); ov.className = "export";
+  ov.innerHTML = `<div class="sheet-head"><b>Grid als Bild</b><button class="pill">Schließen</button></div>
+    <p class="note">Am iPhone: Bild lange drücken → „Zu Fotos hinzufügen“. Am Laptop: „Speichern“. Grüner Rahmen = geplant.</p>
+    <div class="list"><figure><img alt="Grid"><figcaption><span></span><a>Speichern</a></figcaption></figure></div>`;
+  ov.querySelector("img").src = u; ov.querySelector("figcaption span").textContent = file.name;
+  const a = ov.querySelector("figcaption a"); a.href = u; a.download = file.name;
+  ov.querySelector(".pill").onclick = () => { URL.revokeObjectURL(u); ov.remove(); };
+  app.appendChild(ov);
+}
+
 function renderGrid(){
   grid.innerHTML = "";
   grid.classList.toggle("posting", postingMode);
@@ -441,7 +534,8 @@ function renderGrid(){
         t.insertAdjacentHTML("beforeend", `<span class="num">${n}</span>`);
       }
       t.addEventListener("click", () => openSheet(p.id));
-    }
+    }else t.addEventListener("click", () => postMenu(p));
+    if(p.hidden){ t.classList.add("hidden"); t.insertAdjacentHTML("beforeend", '<span class="eye">ausgeblendet</span>'); }
     grid.appendChild(t);
   });
   renderStats();
@@ -676,6 +770,7 @@ async function newAlbumFrom(files){
 }
 $("#fileAlbum").addEventListener("change", e => { newAlbumFrom(e.target.files); e.target.value = ""; });
 $("#addPosted").onclick = () => $("#filePosted").click();
+$("#toggleHidden").onclick = () => { showHidden = !showHidden; renderGrid(); };
 $("#filePosted").addEventListener("change", async e => {
   const files = [...e.target.files]; e.target.value = "";
   if(!files.length) return;
@@ -710,14 +805,21 @@ function setupSortable(){
     onEnd(e){
       if(e.from !== grid || e.oldIndex === e.newIndex || state.view === "new") return;
       const ids = viewPosts().map(p => p.id), [m] = ids.splice(e.oldIndex, 1); ids.splice(e.newIndex, 0, m);
-      layout(state.view).order = ids;
+      // Ausgeblendete Posts bleiben an ihrem Platz, nur die sichtbaren werden neu verteilt
+      const vis = new Set(ids); let k = 0;
+      layout(state.view).order = orderOf(layout(state.view)).map(p => vis.has(p.id) ? ids[k++] : p.id);
       save(); renderGrid();
     },
     onAdd(e){
       const pid = e.item.dataset.pid; e.item.remove();
       if(!pid || !state.photos[pid]) return renderGrid();
       const np = {id: uid(), status: "planned", slides: [{pid, fx: .5, fy: .5}], caption: "", when: ""};
-      state.posts.push(np); placePost(np, state.view === "new" ? null : e.newIndex);
+      let at = null;
+      if(state.view !== "new"){
+        const anchor = viewPosts()[e.newIndex], full = orderOf(layout(state.view));
+        at = anchor ? full.indexOf(anchor) : full.length;
+      }
+      state.posts.push(np); placePost(np, at);
       save(); renderGrid(); renderStrip(); toast("Neuer Post geplant · antippen für Karussell");
     }
   });

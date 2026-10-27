@@ -25,3 +25,8 @@ Der Schlüssel wird nur im Browser auf deinem Gerät gespeichert.
 - **Neueste zuerst**: automatisch nach Datum
 - **Instagram**: die echte Profil-Reihenfolge, einmal von Hand gelegt (Instagram gibt sie nicht heraus); neue Posts kommen beim Sync oben dazu
 - **Versionen**: frei bearbeitbar; „⋯“ → umbenennen, auf Instagram zurücksetzen (geplante oben), duplizieren, löschen
+
+## Weitere Funktionen
+
+- Geposteten Beitrag antippen → **Im Grid ausblenden** (z. B. Reels, die nicht im Raster erscheinen)
+- **⤓ Als Bild**: aktuelle Ansicht als JPEG (1080 px breit, bis 15 Reihen) zum Vergleichen
