@@ -19,3 +19,9 @@ Instagram-Symbol oben rechts → Schritte im Dialog folgen → Token einfügen.
 Die App lädt dann alle Posts (Business- oder Creator-Konto nötig), prüft beim Öffnen auf neue Posts,
 ersetzt geplante Entwürfe mit gleichem Caption-Anfang durch den echten Post und verlängert den Schlüssel selbst.
 Der Schlüssel wird nur im Browser auf deinem Gerät gespeichert.
+
+## Ansichten
+
+- **Neueste zuerst**: automatisch nach Datum
+- **Instagram**: die echte Profil-Reihenfolge, einmal von Hand gelegt (Instagram gibt sie nicht heraus); neue Posts kommen beim Sync oben dazu
+- **Versionen**: frei bearbeitbar; „⋯“ → umbenennen, auf Instagram zurücksetzen (geplante oben), duplizieren, löschen

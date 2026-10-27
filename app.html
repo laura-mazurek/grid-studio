@@ -112,6 +112,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .export .note{font-size:13px;color:var(--muted);padding:0 14px 10px;margin:0}
 .toast{position:absolute;left:50%;bottom:170px;transform:translateX(-50%);background:var(--ink);color:var(--bg);font-size:13px;padding:8px 14px;border-radius:999px;z-index:9;white-space:nowrap;pointer-events:none;max-width:90%;overflow:hidden;text-overflow:ellipsis}
 .headr{display:flex;align-items:center;gap:6px}
+.views{display:flex;gap:6px;overflow-x:auto;padding:0 12px 10px;scrollbar-width:none}
+.views::-webkit-scrollbar{display:none}
+.views button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis}
+.views button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.views .add{border-style:dashed;color:var(--accent)}
+.dialog .stackbtns{display:grid;gap:6px}
+.dialog .stackbtns small{display:block;font-weight:400;color:var(--muted);font-size:11px}
 .iconbtn{border:0;background:var(--chip);width:32px;height:32px;border-radius:10px;display:grid;place-items:center;padding:0;position:relative}
 .iconbtn svg{width:18px;height:18px}
 .iconbtn .dot{position:absolute;right:4px;top:4px;width:7px;height:7px;border-radius:50%;background:var(--muted)}
@@ -135,10 +142,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
         <button id="modeGrid" aria-pressed="true">Grid</button>
         <button id="modePost" aria-pressed="false">Posting</button>
       </div>
-      <button class="iconbtn" id="igOrder" hidden aria-label="Reihenfolge von Instagram übernehmen" title="Reihenfolge von Instagram übernehmen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg></button>
       <button class="iconbtn" id="igBtn" aria-label="Instagram-Verbindung"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r=".6" fill="currentColor"/></svg><span class="dot" id="igDot"></span></button>
     </div>
   </div>
+
+  <div class="views" id="views" role="group" aria-label="Reihenfolge"></div>
 
   <div class="feed" id="feed">
     <div class="grid" id="grid"></div>
@@ -207,11 +215,15 @@ const delImg = id => idb("img", "readwrite", s => s.delete(id));
 const allImgKeys = () => idb("img", "readonly", s => s.getAllKeys());
 let saveTimer;
 function save(){ clearTimeout(saveTimer); saveTimer = setTimeout(() => idb("kv", "readwrite", s => s.put(JSON.stringify(state), "state")), 250); }
+// Beim Schließen oder Wechseln der App sofort speichern, statt auf den Timer zu warten
+function flush(){ if(saveTimer){ clearTimeout(saveTimer); saveTimer = null; idb("kv", "readwrite", s => s.put(JSON.stringify(state), "state")); } }
+addEventListener("pagehide", flush);
+document.addEventListener("visibilitychange", () => { if(document.visibilityState === "hidden") flush(); });
 
 /* ---------- Zustand ---------- */
 // posts[0] = oben links im Grid. slides[0] = Cover.
 let state = {albums: [], photos: {}, posts: [], current: null};
-let postingMode = false, openPost = null, selSlide = 0;
+let postingMode = false, openPost = null, selSlide = 0, gridSort = null;
 const thumbs = {};          // pid -> objectURL
 const fullURLs = {};        // pid -> objectURL (nur bei Bedarf)
 
@@ -284,7 +296,116 @@ function renderStats(){
   $("#stats").textContent = `${ig && ig.user ? "@" + ig.user + " · " : ""}${pl} geplant · ${state.posts.length - pl} gepostet`;
   const dot = $("#igDot");
   dot.className = "dot" + (ig && ig.token ? (ig.error ? " bad" : " ok") : "");
-  $("#igOrder").hidden = !(ig && ig.token);
+}
+
+/* ---------- Ansichten & Versionen ---------- */
+// „new“ = automatisch nach Datum, „ig“ = echte Instagram-Reihenfolge (einmal von Hand gelegt,
+// die API verrät sie nicht), alle weiteren = frei bearbeitbare Versionen. Jede speichert nur die Reihenfolge der Post-IDs.
+const byDate = (a, b) => (b.when || "").localeCompare(a.when || "");
+function layout(id){ return state.layouts.find(l => l.id === id); }
+function ensureLayouts(){
+  if(!Array.isArray(state.layouts)) state.layouts = [];
+  if(!layout("ig")) state.layouts.unshift({id: "ig", name: "Instagram", order: state.posts.map(p => p.id)});
+  if(state.layouts.length < 2) state.layouts.push({id: uid(), name: "Version 1", order: state.posts.map(p => p.id)});
+  if(state.view !== "new" && !layout(state.view)) state.view = state.layouts[1].id;
+}
+function orderOf(l){
+  const map = new Map(state.posts.map(p => [p.id, p])), seen = new Set(), out = [];
+  l.order.forEach(id => { const p = map.get(id); if(p && !seen.has(id)){ seen.add(id); out.push(p); } });
+  state.posts.forEach(p => { if(!seen.has(p.id)) out.push(p); });
+  return out;
+}
+function viewPosts(){
+  if(state.view === "new"){
+    const planned = orderOf(layout("ig")).filter(p => p.status === "planned");
+    return [...planned, ...state.posts.filter(p => p.status !== "planned").sort(byDate)];
+  }
+  return orderOf(layout(state.view));
+}
+// Neuen Post in alle Ansichten einsortieren: in der aktuellen an die Ablagestelle, sonst geplante ganz oben,
+// gepostete direkt unter die geplanten (wie in Instagram) oder auf Wunsch ans Ende.
+function placePost(p, index, atEnd){
+  state.layouts.forEach(l => {
+    const ids = orderOf(l).map(x => x.id).filter(id => id !== p.id);
+    let at;
+    if(l.id === state.view && index != null) at = Math.min(index, ids.length);
+    else if(atEnd) at = ids.length;
+    else if(p.status === "planned") at = 0;
+    else{ at = ids.findIndex(id => { const q = postById(id); return q && q.status !== "planned"; }); if(at < 0) at = ids.length; }
+    ids.splice(at, 0, p.id); l.order = ids;
+  });
+}
+function swapPost(oldId, newId){ state.layouts.forEach(l => { const i = l.order.indexOf(oldId); if(i >= 0) l.order[i] = newId; }); }
+function resetToInstagram(l){
+  const planned = orderOf(l).filter(p => p.status === "planned");
+  l.order = [...planned, ...orderOf(layout("ig")).filter(p => p.status !== "planned")].map(p => p.id);
+}
+
+function renderViews(){
+  const box = $("#views"); box.innerHTML = "";
+  [{id: "new", name: "Neueste zuerst"}, ...state.layouts].forEach(v => {
+    const b = document.createElement("button");
+    const active = v.id === state.view;
+    b.textContent = v.name + (active && v.id !== "new" ? " ⋯" : "");
+    b.setAttribute("aria-pressed", active);
+    b.onclick = () => {
+      if(active){ if(v.id === "new") toast("Automatisch nach Datum, Verschieben geht in den anderen Ansichten"); else viewDialog(v); return; }
+      state.view = v.id; save(); renderViews(); renderGrid();
+    };
+    box.appendChild(b);
+  });
+  const add = document.createElement("button");
+  add.className = "add"; add.textContent = "＋ Version";
+  add.onclick = () => {
+    const l = {id: uid(), name: "Version " + state.layouts.length, order: viewPosts().map(p => p.id)};
+    state.layouts.push(l); state.view = l.id; save(); renderViews(); renderGrid();
+    toast(`„${l.name}“ angelegt, Kopie der bisherigen Ansicht`);
+  };
+  box.appendChild(add);
+  if(gridSort) gridSort.option("sort", state.view !== "new");
+}
+
+function viewDialog(l){
+  const back = document.createElement("div"); back.className = "dialog-back";
+  const close = () => back.remove();
+  back.addEventListener("click", e => { if(e.target === back) close(); });
+  if(l.id === "ig"){
+    back.innerHTML = `<div class="dialog wide"><b>Instagram-Reihenfolge</b>
+      <p>Hier liegt dein Profil so, wie es in Instagram wirklich aussieht. Instagram gibt die umsortierte Reihenfolge nicht heraus, deshalb schiebst du sie hier einmal zurecht. Neue Posts kommen beim Sync automatisch oben dazu.</p>
+      <div class="stackbtns"><button class="btn" id="vDate">Nach Datum ordnen<small>Gepostete Bilder neu nach Datum, geplante bleiben oben</small></button>
+      <button class="btn" id="vClose">Schließen</button></div></div>`;
+    back.querySelector("#vDate").onclick = () => {
+      const planned = orderOf(l).filter(p => p.status === "planned");
+      l.order = [...planned, ...state.posts.filter(p => p.status !== "planned").sort(byDate)].map(p => p.id);
+      save(); renderGrid(); close(); toast("Nach Datum geordnet");
+    };
+  }else{
+    back.innerHTML = `<form class="dialog wide"><b>Version bearbeiten</b>
+      <input id="vName" maxlength="30" aria-label="Name der Version">
+      <div class="stackbtns">
+        <button class="btn primary" type="submit">Namen speichern</button>
+        <button class="btn" type="button" id="vReset">Auf Instagram zurücksetzen<small>Geplante Posts oben, darunter die echte Instagram-Reihenfolge</small></button>
+        <button class="btn" type="button" id="vDup">Duplizieren</button>
+        <button class="btn warn" type="button" id="vDel">Version löschen</button>
+        <button class="btn" type="button" id="vClose">Schließen</button>
+      </div></form>`;
+    const name = back.querySelector("#vName"); name.value = l.name;
+    back.querySelector("form").onsubmit = e => { e.preventDefault(); l.name = name.value.trim() || l.name; save(); renderViews(); close(); };
+    back.querySelector("#vReset").onclick = () => { resetToInstagram(l); save(); renderGrid(); close(); toast("Auf Instagram-Reihenfolge zurückgesetzt"); };
+    back.querySelector("#vDup").onclick = () => {
+      const c = {id: uid(), name: l.name + " Kopie", order: orderOf(l).map(p => p.id)};
+      state.layouts.push(c); state.view = c.id; save(); renderViews(); renderGrid(); close(); toast(`„${c.name}“ angelegt`);
+    };
+    const del = back.querySelector("#vDel");
+    if(state.layouts.length <= 2) del.hidden = true;
+    del.onclick = () => {
+      if(!del.dataset.armed){ del.dataset.armed = "1"; del.textContent = "Sicher? Nochmal tippen"; return; }
+      state.layouts = state.layouts.filter(x => x !== l); state.view = state.layouts[1].id;
+      save(); renderViews(); renderGrid(); close(); toast("Version gelöscht");
+    };
+  }
+  back.querySelector("#vClose").onclick = close;
+  app.appendChild(back);
 }
 
 function renderGrid(){
@@ -293,8 +414,9 @@ function renderGrid(){
   if(!state.posts.length){
     grid.innerHTML = `<div class="empty"><b>Dein Feed ist noch leer</b>Leg unten mit „＋ Album“ ein Album an und zieh ein Foto hier hoch. Deine bisherigen Posts holst du mit dem Button darunter dazu.</div>`;
   }
-  const planned = state.posts.filter(p => p.status === "planned");
-  state.posts.forEach(p => {
+  const list = viewPosts();
+  const planned = list.filter(p => p.status === "planned");
+  list.forEach(p => {
     const t = document.createElement("div");
     t.className = "tile" + (p.status === "planned" ? " planned" : "");
     t.dataset.id = p.id;
@@ -550,7 +672,7 @@ $("#filePosted").addEventListener("change", async e => {
   toast("Gepostete Bilder werden geladen …");
   const ids = await ingest(files, "_posted");
   // Reihenfolge der Auswahl = von neu nach alt; landen unter dem bestehenden Feed
-  ids.forEach(pid => state.posts.push({id: uid(), status: "posted", slides: [{pid, fx: .5, fy: .5}]}));
+  ids.forEach(pid => { const np = {id: uid(), status: "posted", slides: [{pid, fx: .5, fy: .5}]}; state.posts.push(np); placePost(np, null, true); });
   save(); renderGrid(); toast(`${ids.length} gepostete Bilder hinzugefügt`);
 });
 // Am Laptop: Dateien direkt auf die Album-Leiste ziehen
@@ -574,16 +696,18 @@ function setupSortable(){
   if(!window.Sortable){ toast("Ziehen nicht verfügbar, bitte neu laden"); return; }
   const touch = {delay: 160, delayOnTouchOnly: true, touchStartThreshold: 4};
   Sortable.create(strip, {...touch, group: {name: "photos", pull: "clone", put: false}, sort: false, animation: 150, draggable: ".ph"});
-  Sortable.create(grid, {...touch, group: {name: "photos", put: true}, animation: 180, draggable: ".tile",
+  gridSort = Sortable.create(grid, {...touch, group: {name: "photos", put: true}, animation: 180, draggable: ".tile", sort: state.view !== "new",
     onEnd(e){
-      if(e.from !== grid || e.oldIndex === e.newIndex) return;
-      const [m] = state.posts.splice(e.oldIndex, 1); state.posts.splice(e.newIndex, 0, m);
+      if(e.from !== grid || e.oldIndex === e.newIndex || state.view === "new") return;
+      const ids = viewPosts().map(p => p.id), [m] = ids.splice(e.oldIndex, 1); ids.splice(e.newIndex, 0, m);
+      layout(state.view).order = ids;
       save(); renderGrid();
     },
     onAdd(e){
       const pid = e.item.dataset.pid; e.item.remove();
       if(!pid || !state.photos[pid]) return renderGrid();
-      state.posts.splice(e.newIndex, 0, {id: uid(), status: "planned", slides: [{pid, fx: .5, fy: .5}], caption: "", when: ""});
+      const np = {id: uid(), status: "planned", slides: [{pid, fx: .5, fy: .5}], caption: "", when: ""};
+      state.posts.push(np); placePost(np, state.view === "new" ? null : e.newIndex);
       save(); renderGrid(); renderStrip(); toast("Neuer Post geplant · antippen für Karussell");
     }
   });
@@ -653,14 +777,11 @@ function mergeIg(items, complete){
         const b = norm(p.caption);
         return p.status === "planned" && b.length >= 8 && (a.startsWith(b) || b.startsWith(a));
       });
-      if(pl){ state.posts[state.posts.indexOf(pl)] = f; done.push(f); }
+      if(pl){ state.posts[state.posts.indexOf(pl)] = f; swapPost(pl.id, f.id); done.push(f); }
     });
   }
-  // Rest kommt wie in Instagram oben über die bisherigen Posts, unter die geplanten
-  const rest = fresh.filter(f => !done.includes(f));
-  let at = state.posts.findIndex(p => p.status !== "planned");
-  if(at < 0) at = state.posts.length;
-  state.posts.splice(at, 0, ...rest);
+  // Rest kommt wie in Instagram oben über die bisherigen Posts, unter die geplanten (älteste zuerst, damit der neueste oben landet)
+  fresh.filter(f => !done.includes(f)).reverse().forEach(f => { state.posts.push(f); placePost(f); });
   return {added: fresh.length, matched: done.length};
 }
 
@@ -690,7 +811,7 @@ async function resolveTarget(ig){
   return r;
 }
 
-async function igSync(silent, reorder){
+async function igSync(silent){
   const ig = state.ig;
   if(!ig || !ig.token || syncing) return false;
   syncing = true; $("#igBtn").classList.add("spin");
@@ -707,18 +828,9 @@ async function igSync(silent, reorder){
       url = j.paging && j.paging.next;
     }
     const r = mergeIg(items, !url);
-    if(reorder){
-      // Gepostete Bilder exakt in der Reihenfolge, die Instagram liefert; geplante bleiben oben, eigene Uploads ganz unten
-      const pos = new Map(items.map((m, i) => [m.id, i]));
-      const planned = state.posts.filter(p => p.status === "planned");
-      const fromIg = state.posts.filter(p => p.status !== "planned" && p.igId && pos.has(p.igId)).sort((a, b) => pos.get(a.igId) - pos.get(b.igId));
-      const rest = state.posts.filter(p => !planned.includes(p) && !fromIg.includes(p));
-      state.posts = [...planned, ...fromIg, ...rest];
-    }
     ig.lastSync = Date.now(); ig.error = "";
     save(); renderGrid(); renderStrip();
-    if(reorder) toast("Reihenfolge von Instagram übernommen");
-    else if(r.matched) toast(r.matched === 1 ? "Geplanter Post ist jetzt online ✓" : `${r.matched} geplante Posts sind online ✓`);
+    if(r.matched) toast(r.matched === 1 ? "Geplanter Post ist jetzt online ✓" : `${r.matched} geplante Posts sind online ✓`);
     else if(!silent) toast(r.added ? `${r.added} Posts von Instagram geladen` : "Alles aktuell");
     return true;
   }catch(e){
@@ -800,7 +912,6 @@ function igDialog(){
   app.appendChild(back);
 }
 $("#igBtn").onclick = igDialog;
-$("#igOrder").onclick = () => igSync(false, true);
 
 /* ---------- Start ---------- */
 (async () => {
@@ -818,7 +929,8 @@ $("#igOrder").onclick = () => igSync(false, true);
   }
   if(state.current && !state.albums.some(a => a.id === state.current)) state.current = state.albums[0] ? state.albums[0].id : null;
   if(!db) toast("Speichern nicht möglich: Daten gehen beim Schließen verloren");
-  renderAlbums(); renderStrip(); renderGrid(); setupSortable();
+  ensureLayouts();
+  renderAlbums(); renderStrip(); setupSortable(); renderViews(); renderGrid();
   igAuto();
   document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") igAuto(); });
 })();
