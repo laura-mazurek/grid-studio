@@ -214,7 +214,7 @@ const getImg = id => idb("img", "readonly", s => s.get(id));
 const delImg = id => idb("img", "readwrite", s => s.delete(id));
 const allImgKeys = () => idb("img", "readonly", s => s.getAllKeys());
 let saveTimer;
-function save(){ clearTimeout(saveTimer); saveTimer = setTimeout(() => idb("kv", "readwrite", s => s.put(JSON.stringify(state), "state")), 250); }
+function save(){ clearTimeout(saveTimer); saveTimer = setTimeout(() => idb("kv", "readwrite", s => s.put(JSON.stringify(state), "state")), 80); }
 // Beim Schließen oder Wechseln der App sofort speichern, statt auf den Timer zu warten
 function flush(){ if(saveTimer){ clearTimeout(saveTimer); saveTimer = null; idb("kv", "readwrite", s => s.put(JSON.stringify(state), "state")); } }
 addEventListener("pagehide", flush);
