@@ -30,3 +30,12 @@ Der Schlüssel wird nur im Browser auf deinem Gerät gespeichert.
 
 - Geposteten Beitrag antippen → **Im Grid ausblenden** (z. B. Reels, die nicht im Raster erscheinen)
 - **⤓ Als Bild**: aktuelle Ansicht als JPEG (1080 px breit, bis 15 Reihen) zum Vergleichen
+
+## Board (Karussell-Planer)
+
+Oben auf **Board**: breite Arbeitsansicht. Links die Karussells (jede Reihe = ein geplanter Post), in der Mitte alle Bilder des Albums
+(antippen = auswählen, ♥ = Favorit, ziehen = in ein Karussell), rechts die Grid-Vorschau. „Vorschau“ zeigt das Karussell wie in Instagram.
+
+## Übertragen
+
+Unter dem Grid: **⇄ Auf anderes Gerät übertragen** → Datei erstellen → per AirDrop schicken → auf dem anderen Gerät „Datei übernehmen“.

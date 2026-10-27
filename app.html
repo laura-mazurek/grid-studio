@@ -139,6 +139,73 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .check{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--muted)}
 .check input{width:auto;margin-top:2px}
 .err{color:var(--danger)!important}
+/* ---------- Board: breite Arbeitsansicht ---------- */
+body.boardmode{background:var(--bg)}
+body.boardmode .shell{padding:0}
+body.boardmode .app{max-width:none;height:100%;border:0;border-radius:0;box-shadow:none}
+.headbtn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:6px 11px;font-size:12px;font-weight:700}
+body.boardmode .headbtn{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+body.boardmode .seg{display:none}
+.board{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) 250px;border-top:1px solid var(--line)}
+.bcol{min-width:0;overflow-y:auto;padding:16px max(16px,env(safe-area-inset-left,0px)) 40px 16px;display:flex;flex-direction:column;gap:14px}
+.bcol + .bcol{border-left:1px solid var(--line)}
+.bcol h2{font-family:var(--display);font-size:17px;margin:0;display:flex;align-items:baseline;gap:8px}
+.bcol h2 small{font-family:var(--body);font-size:12px;color:var(--muted);font-weight:500}
+@media (max-width:1150px){.board{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.bprev{display:none}}
+@media (max-width:760px){.board{display:block;overflow-y:auto}.bcol{overflow:visible}.bcol + .bcol{border-left:0;border-top:1px solid var(--line)}}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;color:var(--muted)}
+.chips button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chips .add{border-style:dashed;color:var(--accent)}
+.crow{border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:10px 12px;display:grid;gap:8px}
+.crow-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.crow-head input{flex:1;min-width:120px;border:0;background:none;font:700 15px var(--display);color:var(--ink);padding:2px 0}
+.crow-head input:focus{outline:none;border-bottom:1.5px solid var(--accent)}
+.crow-meta{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.crow-meta.warn{color:var(--danger);font-weight:700}
+.minibtn{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:4px 9px;font-size:12px;font-weight:600}
+.minibtn.go{background:var(--plan);border-color:var(--plan);color:var(--plan-ink)}
+.minibtn.warn{color:var(--danger)}
+.bslides{display:flex;gap:6px;overflow-x:auto;min-height:118px;padding:2px 2px 6px;align-items:flex-start}
+.bslides:empty::before{content:"Bilder hierher ziehen";color:var(--muted);font-size:12px;align-self:center;padding-left:6px}
+.bs{flex:none;width:86px;aspect-ratio:4/5;border-radius:6px;background:var(--chip) center/cover no-repeat;position:relative;cursor:grab;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.bs .n{position:absolute;left:4px;top:4px;background:#fff;color:#1D1B22;font-size:10px;font-weight:700;border-radius:4px;padding:0 4px;font-variant-numeric:tabular-nums}
+.bs .x{position:absolute;right:-5px;top:-5px;width:20px;height:20px;border-radius:50%;border:0;background:var(--ink);color:var(--bg);font-size:12px;line-height:20px;padding:0;display:none}
+.bs:hover .x,.bs:focus-within .x{display:block}
+@media (hover:none){.bs .x{display:block}}
+.cstrip{display:flex;height:6px;border-radius:3px;overflow:hidden}
+.cstrip span{flex:1}
+.newrow{border:1.5px dashed var(--line);border-radius:14px;min-height:96px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;text-align:center;padding:10px;gap:6px;flex-wrap:wrap}
+.newrow .bph{display:none}
+.pool{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px}
+.bph{aspect-ratio:4/5;border-radius:6px;background:var(--chip) center/cover no-repeat;position:relative;cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.bph.used{opacity:.4}
+.bph.sel{box-shadow:0 0 0 3px var(--accent)}
+.bph .sn{position:absolute;left:5px;top:5px;min-width:20px;height:20px;border-radius:10px;background:var(--accent);color:var(--bg);font-size:11px;font-weight:700;display:grid;place-items:center;padding:0 4px;box-sizing:border-box}
+.bph .fav{position:absolute;right:4px;top:4px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(18,17,22,.45);color:#fff;font-size:13px;line-height:26px;padding:0}
+.bph .fav.on{background:#fff;color:#C2185B}
+.selbar{position:sticky;top:-16px;z-index:2;background:var(--bg);padding:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+.mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px}
+.mgrid div{aspect-ratio:3/4;background:var(--chip) center/cover no-repeat;position:relative}
+.mgrid div.planned::after{content:"";position:absolute;inset:0;border:2px solid var(--plan)}
+.mgrid div.mine::after{border-color:var(--accent);border-width:3px}
+.bhint{font-size:12px;color:var(--muted);margin:0;line-height:1.45}
+/* Karussell-Vorschau */
+.igprev{position:absolute;inset:0;z-index:9;background:rgba(10,8,14,.82);display:grid;place-items:center;padding:16px;overflow-y:auto}
+.igcard{background:#fff;color:#111;width:min(420px,100%);border-radius:14px;overflow:hidden}
+.igtop{display:flex;align-items:center;gap:8px;padding:10px 12px;font-weight:700;font-size:13px}
+.igtop i{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#F9CE34,#EE2A7B,#6228D7)}
+.igtop .sp{flex:1}
+.igtop button{border:1px solid #ddd;background:#fff;border-radius:6px;font-size:11px;padding:3px 7px;color:#111}
+.igslide{position:relative;background:#111 center/cover no-repeat;touch-action:pan-y}
+.igslide .nav{position:absolute;top:50%;transform:translateY(-50%);width:30px;height:30px;border-radius:50%;border:0;background:rgba(255,255,255,.85);color:#111;font-size:16px}
+.igslide .prev{left:8px}.igslide .next{right:8px}
+.igslide .cnt{position:absolute;right:10px;top:10px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:2px 8px;border-radius:10px}
+.igdots{display:flex;justify-content:center;gap:4px;padding:10px}
+.igdots span{width:6px;height:6px;border-radius:50%;background:#ccc}
+.igdots span.on{background:#0095F6}
+.igcap{padding:0 12px 14px;font-size:13px;line-height:1.4;white-space:pre-wrap}
+.igclose{display:block;margin:12px auto 0;border:0;background:#fff;color:#111;border-radius:999px;padding:8px 18px;font-weight:700}
 @media (prefers-reduced-motion:reduce){.sheet{transition:none}.iconbtn.spin svg{animation:none}}
 </style>
 
@@ -146,6 +213,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   <div class="head">
     <div><h1>Grid Studio</h1><small id="stats">lädt …</small></div>
     <div class="headr">
+      <button class="headbtn" id="boardBtn">Board</button>
       <div class="seg" role="group" aria-label="Ansicht">
         <button id="modeGrid" aria-pressed="true">Grid</button>
         <button id="modePost" aria-pressed="false">Posting</button>
@@ -155,12 +223,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   </div>
 
   <div class="views" id="views" role="group" aria-label="Reihenfolge"></div>
+  <div class="board" id="board" hidden></div>
 
   <div class="feed" id="feed">
     <div class="grid" id="grid"></div>
     <div class="feedfoot">
       <button class="addposted" id="addPosted">＋ Gepostete Bilder von Hand</button>
       <button class="addposted" id="toggleHidden" hidden></button>
+      <button class="addposted" id="transferBtn">⇄ Auf anderes Gerät übertragen</button>
     </div>
   </div>
 
@@ -189,6 +259,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 
   <input type="file" id="fileAlbum" accept="image/*" multiple hidden>
   <input type="file" id="filePosted" accept="image/*" multiple hidden>
+  <input type="file" id="fileBackup" hidden>
 </div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
@@ -523,6 +594,7 @@ async function exportGrid(){
 }
 
 function renderGrid(){
+  if(state.board) renderBoard();
   grid.innerHTML = "";
   grid.classList.toggle("posting", postingMode);
   if(!state.posts.length){
@@ -569,6 +641,7 @@ function renderAlbums(){
 }
 
 function renderStrip(){
+  if(state.board) renderBoard();
   strip.innerHTML = "";
   const ids = Object.keys(state.photos).filter(id => state.photos[id].album === state.current);
   if(!state.current || !ids.length){
@@ -1037,6 +1110,307 @@ function igDialog(){
 }
 $("#igBtn").onclick = igDialog;
 
+/* ---------- Board: Hochzeit auf mehrere Karussells aufteilen ---------- */
+// Jede Reihe ist ein geplanter Post mit album = aktuelles Album. Pool = alle Fotos des Albums.
+let boardFilter = "all", boardSorts = [];
+const boardSel = new Set();
+function boardPosts(){ return state.posts.filter(p => p.status === "planned" && p.album && p.album === state.current); }
+
+function avgColor(pid, el){
+  const ph = state.photos[pid];
+  if(!ph) return;
+  if(ph.c){ el.style.background = ph.c; return; }
+  thumbURL(pid).then(u => {
+    if(!u || u.startsWith("http")) return;
+    const im = new Image();
+    im.onload = () => {
+      const c = document.createElement("canvas"); c.width = c.height = 1;
+      const g = c.getContext("2d"); g.drawImage(im, 0, 0, 1, 1);
+      const d = g.getImageData(0, 0, 1, 1).data;
+      ph.c = `rgb(${d[0]},${d[1]},${d[2]})`; el.style.background = ph.c; save();
+    };
+    im.src = u;
+  });
+}
+
+function setBoard(on){
+  state.board = !!on; save();
+  document.body.classList.toggle("boardmode", state.board);
+  $("#board").hidden = !state.board;
+  ["#views", "#feed", "#tray"].forEach(sel => $(sel).hidden = state.board);
+  $("#boardBtn").textContent = state.board ? "← Grid" : "Board";
+  if(state.board) renderBoard();
+  else{ boardSorts.forEach(x => x.destroy()); boardSorts = []; renderViews(); renderGrid(); renderStrip(); }
+}
+$("#boardBtn").onclick = () => setBoard(!state.board);
+
+function newCarousel(pids, at){
+  const n = state.posts.filter(p => p.album === state.current).length + 1;
+  const np = {id: uid(), status: "planned", album: state.current, title: "Karussell " + n, slides: pids.map(pid => ({pid, fx: .5, fy: .5})), caption: "", when: ""};
+  state.posts.push(np); placePost(np);
+  return np;
+}
+function dropEmpty(p){
+  if(p.slides.length) return;
+  state.posts = state.posts.filter(x => x !== p); toast(`„${p.title || "Karussell"}“ war leer und wurde entfernt`);
+}
+
+function renderBoard(){
+  const box = $("#board");
+  boardSorts.forEach(x => x.destroy()); boardSorts = [];
+  box.innerHTML = "";
+  const touch = {delay: 160, delayOnTouchOnly: true, touchStartThreshold: 4};
+  const used = usedIds();
+
+  // --- Spalte 1: Karussells
+  const c1 = document.createElement("div"); c1.className = "bcol";
+  const rows = boardPosts();
+  c1.innerHTML = `<h2>Karussells <small>${rows.length ? rows.length + " geplant aus diesem Album" : "noch keine"}</small></h2>
+    <p class="bhint">Bilder aus der Mitte in eine Reihe ziehen. Zwischen Reihen verschieben, zurück in die Mitte ziehen = entfernen. Jede Reihe ist ein geplanter Post im Grid.</p>`;
+  rows.forEach(p => {
+    const r = document.createElement("div"); r.className = "crow";
+    const over = p.slides.length > 20;
+    r.innerHTML = `<div class="crow-head"><input aria-label="Name des Karussells" maxlength="40">
+        <span class="crow-meta${over ? " warn" : ""}">${p.slides.length} Slides${over ? " · max. 20!" : ""} · ${fmtDate(p.when)}</span>
+        ${boardSel.size ? `<button class="minibtn go" data-act="addsel">＋ ${boardSel.size} ausgewählte</button>` : ""}
+        <button class="minibtn" data-act="prev">Vorschau</button>
+        <button class="minibtn" data-act="edit">Details</button>
+        <button class="minibtn warn" data-act="del">Löschen</button></div>
+      <div class="cstrip"></div><div class="bslides" data-post="${p.id}"></div>`;
+    const inp = r.querySelector("input"); inp.value = p.title || "";
+    inp.addEventListener("change", () => { p.title = inp.value.trim(); save(); });
+    const strip = r.querySelector(".cstrip"), list = r.querySelector(".bslides");
+    p.slides.forEach((sl, i) => {
+      const d = document.createElement("div"); d.className = "bs"; d.dataset.pid = sl.pid;
+      bg(d, sl.pid, sl.fx, sl.fy);
+      d.innerHTML = `<span class="n">${i + 1}</span><button class="x" aria-label="Slide entfernen">×</button>`;
+      d.querySelector(".x").onclick = e => { e.stopPropagation(); p.slides.splice(i, 1); dropEmpty(p); save(); renderBoard(); };
+      list.appendChild(d);
+      const cs = document.createElement("span"); strip.appendChild(cs); avgColor(sl.pid, cs);
+    });
+    r.querySelectorAll("[data-act]").forEach(b => b.onclick = () => {
+      const a = b.dataset.act;
+      if(a === "addsel"){
+        const add = [...boardSel].filter(pid => !p.slides.some(x => x.pid === pid));
+        if(p.slides.length + add.length > 20) toast("Achtung: Instagram erlaubt maximal 20 Slides");
+        add.forEach(pid => p.slides.push({pid, fx: .5, fy: .5})); boardSel.clear(); save(); renderBoard();
+      }
+      if(a === "prev") igPreview(p);
+      if(a === "edit") openSheet(p.id);
+      if(a === "del"){
+        if(!b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "Sicher?"; return; }
+        state.posts = state.posts.filter(x => x !== p); save(); renderBoard(); toast("Karussell gelöscht");
+      }
+    });
+    boardSorts.push(Sortable.create(list, {...touch, group: "board", animation: 150, draggable: ".bs", direction: "horizontal", filter: ".x", preventOnFilter: false,
+      onUpdate(e){ const [m] = p.slides.splice(e.oldIndex, 1); p.slides.splice(e.newIndex, 0, m); save(); renderBoard(); },
+      onAdd(e){
+        const pid = e.item.dataset.pid, src = e.from.dataset.post && postById(e.from.dataset.post);
+        e.item.remove();
+        let sl = {pid, fx: .5, fy: .5};
+        if(src){ sl = src.slides.splice(e.oldIndex, 1)[0] || sl; dropEmpty(src); }
+        if(p.slides.length >= 20) toast("Achtung: mehr als 20 Slides gehen in Instagram nicht");
+        p.slides.splice(e.newIndex, 0, sl); save(); renderBoard();
+      }
+    }));
+    c1.appendChild(r);
+  });
+  const nr = document.createElement("div"); nr.className = "newrow";
+  nr.innerHTML = `<span>Bild hierher ziehen = <b>neues Karussell</b></span>${boardSel.size ? `<button class="minibtn go" id="newFromSel">Neues Karussell aus ${boardSel.size} ausgewählten</button>` : ""}`;
+  c1.appendChild(nr);
+  boardSorts.push(Sortable.create(nr, {...touch, group: "board", draggable: ".bph,.bs",
+    onAdd(e){
+      const pid = e.item.dataset.pid, src = e.from.dataset.post && postById(e.from.dataset.post);
+      e.item.remove();
+      if(src){ src.slides.splice(e.oldIndex, 1); dropEmpty(src); }
+      newCarousel([pid]); save(); renderBoard();
+    }
+  }));
+  const nfs = nr.querySelector("#newFromSel");
+  if(nfs) nfs.onclick = () => { newCarousel([...boardSel]); boardSel.clear(); save(); renderBoard(); };
+
+  // --- Spalte 2: alle Bilder des Albums
+  const c2 = document.createElement("div"); c2.className = "bcol";
+  const ids = Object.keys(state.photos).filter(id => state.photos[id].album === state.current);
+  const favs = ids.filter(id => state.photos[id].fav).length, free = ids.filter(id => !used.has(id)).length;
+  c2.innerHTML = `<h2>Bilder <small>${ids.length} im Album · ${favs} ♥ · ${free} unbenutzt</small></h2>
+    <div class="chips" id="bAlbums"></div>
+    <div class="chips" id="bFilter"></div>
+    <div class="selbar" id="bSel"></div>
+    <div class="pool" id="bPool"></div>`;
+  const ab = c2.querySelector("#bAlbums");
+  state.albums.forEach(a => {
+    const b = document.createElement("button"); b.textContent = a.name; b.setAttribute("aria-pressed", a.id === state.current);
+    b.onclick = () => { state.current = a.id; boardSel.clear(); save(); renderBoard(); };
+    ab.appendChild(b);
+  });
+  const addA = document.createElement("button"); addA.className = "add"; addA.textContent = "＋ Album laden"; addA.onclick = () => $("#fileAlbum").click(); ab.appendChild(addA);
+  const fb = c2.querySelector("#bFilter");
+  [["all", "Alle"], ["fav", "♥ Favoriten"], ["free", "Unbenutzt"]].forEach(([k, label]) => {
+    const b = document.createElement("button"); b.textContent = label; b.setAttribute("aria-pressed", boardFilter === k);
+    b.onclick = () => { boardFilter = k; renderBoard(); }; fb.appendChild(b);
+  });
+  const sb = c2.querySelector("#bSel");
+  sb.innerHTML = boardSel.size
+    ? `<b>${boardSel.size} ausgewählt</b><button class="minibtn" id="selFav">♥ alle markieren</button><button class="minibtn" id="selClear">Auswahl aufheben</button>`
+    : `<span class="bhint">Antippen = auswählen (Reihenfolge zählt) · ♥ = in die engere Wahl · Ziehen = direkt in ein Karussell</span>`;
+  if(boardSel.size){
+    sb.querySelector("#selClear").onclick = () => { boardSel.clear(); renderBoard(); };
+    sb.querySelector("#selFav").onclick = () => { boardSel.forEach(id => state.photos[id].fav = true); save(); renderBoard(); };
+  }
+  const pool = c2.querySelector("#bPool");
+  const shown = ids.filter(id => boardFilter === "all" || (boardFilter === "fav" ? state.photos[id].fav : !used.has(id)));
+  if(!state.current) pool.innerHTML = `<p class="bhint">Lade ein Album mit „＋ Album laden“, z. B. alle Bilder einer Hochzeit.</p>`;
+  else if(!shown.length) pool.innerHTML = `<p class="bhint">Keine Bilder für diesen Filter.</p>`;
+  shown.forEach(id => {
+    const d = document.createElement("div");
+    const selIdx = [...boardSel].indexOf(id);
+    d.className = "bph" + (used.has(id) ? " used" : "") + (selIdx >= 0 ? " sel" : "");
+    d.dataset.pid = id; bg(d, id);
+    d.innerHTML = (selIdx >= 0 ? `<span class="sn">${selIdx + 1}</span>` : "") + `<button class="fav${state.photos[id].fav ? " on" : ""}" aria-label="Favorit">♥</button>`;
+    d.querySelector(".fav").onclick = e => { e.stopPropagation(); state.photos[id].fav = !state.photos[id].fav; save(); renderBoard(); };
+    d.onclick = () => { boardSel.has(id) ? boardSel.delete(id) : boardSel.add(id); renderBoard(); };
+    pool.appendChild(d);
+  });
+  boardSorts.push(Sortable.create(pool, {...touch, group: {name: "board", pull: "clone", put: true}, sort: false, draggable: ".bph", filter: ".fav", preventOnFilter: false,
+    onAdd(e){
+      const src = e.from.dataset.post && postById(e.from.dataset.post);
+      e.item.remove();
+      if(src){ src.slides.splice(e.oldIndex, 1); dropEmpty(src); save(); }
+      renderBoard();
+    }
+  }));
+
+  // --- Spalte 3: Grid-Vorschau
+  const c3 = document.createElement("div"); c3.className = "bcol bprev";
+  const vname = state.view === "new" ? "Neueste zuerst" : layout(state.view).name;
+  c3.innerHTML = `<h2>Im Grid <small>${vname}</small></h2><div class="mgrid" id="bGrid"></div>
+    <p class="bhint">Grün = geplant, lila = aus diesem Album. Reihenfolge und Versionen änderst du in der Grid-Ansicht.</p>`;
+  const mg = c3.querySelector("#bGrid");
+  viewPosts().filter(p => !p.hidden).slice(0, 24).forEach(p => {
+    const d = document.createElement("div");
+    if(p.status === "planned") d.className = "planned" + (p.album === state.current ? " mine" : "");
+    if(p.slides[0]) bg(d, p.slides[0].pid, p.slides[0].fx, p.slides[0].fy);
+    mg.appendChild(d);
+  });
+
+  box.append(c1, c2, c3);
+  renderStats();
+}
+
+// Karussell so anzeigen wie in Instagram
+function igPreview(p){
+  let i = 0, ratio = "4/5";
+  const ov = document.createElement("div"); ov.className = "igprev";
+  ov.innerHTML = `<div><div class="igcard"><div class="igtop"><i></i><span class="sp"></span><button id="ipRatio"></button></div>
+    <div class="igslide" id="ipSlide"><span class="cnt"></span><button class="nav prev" aria-label="Zurück">‹</button><button class="nav next" aria-label="Weiter">›</button></div>
+    <div class="igdots"></div><div class="igcap"></div></div><button class="igclose">Schließen</button></div>`;
+  ov.querySelector(".sp").textContent = state.ig && state.ig.user ? state.ig.user : "dein_profil";
+  ov.querySelector(".igcap").textContent = p.caption || "(noch keine Caption)";
+  const sl = ov.querySelector("#ipSlide"), dots = ov.querySelector(".igdots");
+  const show = () => {
+    const s = p.slides[i];
+    sl.style.aspectRatio = ratio; sl.style.backgroundPosition = `${s.fx * 100}% ${s.fy * 100}%`;
+    fullURL(s.pid).then(u => { if(u) sl.style.backgroundImage = `url("${u}")`; });
+    ov.querySelector(".cnt").textContent = `${i + 1}/${p.slides.length}`;
+    dots.innerHTML = p.slides.map((_, k) => `<span class="${k === i ? "on" : ""}"></span>`).join("");
+    ov.querySelector(".prev").hidden = i === 0; ov.querySelector(".next").hidden = i === p.slides.length - 1;
+    ov.querySelector("#ipRatio").textContent = ratio === "4/5" ? "4:5" : "3:4";
+  };
+  const go = d => { i = Math.max(0, Math.min(p.slides.length - 1, i + d)); show(); };
+  ov.querySelector(".prev").onclick = () => go(-1);
+  ov.querySelector(".next").onclick = () => go(1);
+  ov.querySelector("#ipRatio").onclick = () => { ratio = ratio === "4/5" ? "3/4" : "4/5"; show(); };
+  let sx = null;
+  sl.addEventListener("pointerdown", e => { sx = e.clientX; });
+  sl.addEventListener("pointerup", e => { if(sx != null && Math.abs(e.clientX - sx) > 40) go(e.clientX < sx ? 1 : -1); sx = null; });
+  const key = e => { if(e.key === "ArrowRight") go(1); if(e.key === "ArrowLeft") go(-1); if(e.key === "Escape") close(); };
+  const close = () => { ov.remove(); document.removeEventListener("keydown", key); };
+  document.addEventListener("keydown", key);
+  ov.querySelector(".igclose").onclick = close;
+  ov.addEventListener("click", e => { if(e.target === ov) close(); });
+  show(); app.appendChild(ov);
+}
+
+/* ---------- Übertragen & Sichern ---------- */
+// Dateiformat: Kennung, Länge des Kopfs, Kopf (JSON mit Zustand und Bildverzeichnis), danach die Bilder als Rohdaten.
+const MAGIC = "GRIDSTUDIO1\n";
+async function exportBackup(withAll){
+  const used = usedIds();
+  const keep = Object.keys(state.photos).filter(id => withAll || used.has(id) || state.photos[id].fav || state.photos[id].remote);
+  toast("Datei wird erstellt …");
+  const parts = [], index = {};
+  let off = 0;
+  for(const id of keep){
+    const rec = await getImg(id);
+    if(!rec) continue;
+    index[id] = {};
+    for(const k of ["full", "thumb"]){
+      if(!rec[k]) continue;
+      index[id][k] = [off, rec[k].size, rec[k].type];
+      parts.push(rec[k]); off += rec[k].size;
+    }
+  }
+  const st = JSON.parse(JSON.stringify(state));
+  st.photos = Object.fromEntries(keep.map(id => [id, state.photos[id]]));
+  const head = JSON.stringify({state: st, index});
+  const headBytes = new TextEncoder().encode(head);
+  const blob = new Blob([MAGIC, String(headBytes.length).padStart(12, "0"), headBytes, ...parts], {type: "application/octet-stream"});
+  const file = new File([blob], `Grid Studio ${new Date().toISOString().slice(0, 10)}.gridstudio`, {type: "application/octet-stream"});
+  try{
+    if(navigator.canShare && navigator.canShare({files: [file]})){ await navigator.share({files: [file]}); return; }
+  }catch(e){ if(e && e.name === "AbortError") return; }
+  const u = URL.createObjectURL(file), a = document.createElement("a");
+  a.href = u; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 60e3);
+  toast(`Gespeichert: ${file.name} (${Math.round(file.size / 1048576)} MB)`);
+}
+async function importBackup(file){
+  try{
+    const magic = await file.slice(0, MAGIC.length).text();
+    if(magic !== MAGIC) throw new Error("Das ist keine Grid-Studio-Datei.");
+    const len = parseInt(await file.slice(MAGIC.length, MAGIC.length + 12).text(), 10);
+    const start = MAGIC.length + 12;
+    const {state: st, index} = JSON.parse(await file.slice(start, start + len).text());
+    const base = start + len;
+    toast("Wird übernommen …");
+    for(const id of Object.keys(index)){
+      const rec = {};
+      for(const k of Object.keys(index[id])){ const [o, l, t] = index[id][k]; rec[k] = file.slice(base + o, base + o + l, t); }
+      // Als echte Blobs speichern, damit sie unabhängig von der Datei bleiben
+      if(rec.full) rec.full = new Blob([await rec.full.arrayBuffer()], {type: rec.full.type});
+      if(rec.thumb) rec.thumb = new Blob([await rec.thumb.arrayBuffer()], {type: rec.thumb.type});
+      await putImg(id, rec);
+    }
+    await idb("kv", "readwrite", s => s.put(JSON.stringify(st), "state"));
+    location.reload();
+  }catch(e){ toast(e.message || "Datei konnte nicht gelesen werden"); }
+}
+function transferDialog(){
+  const back = document.createElement("div"); back.className = "dialog-back";
+  const close = () => back.remove();
+  back.addEventListener("click", e => { if(e.target === back) close(); });
+  back.innerHTML = `<div class="dialog wide"><b>Auf anderes Gerät übertragen</b>
+    <p>Grid Studio speichert alles nur auf dem Gerät, auf dem du es benutzt. So kommt dein Stand aufs andere Gerät: hier eine Datei erstellen, per AirDrop schicken, dort öffnen und übernehmen. Die Instagram-Verbindung kommt mit.</p>
+    <div class="stackbtns">
+      <button class="btn primary" id="tPlan">Datei erstellen: Planung<small>Versionen, Karussells, Instagram, Favoriten. Ohne unbenutzte Album-Fotos, daher klein.</small></button>
+      <button class="btn" id="tAll">Datei erstellen: alles<small>Inklusive aller Album-Fotos. Kann bei einer ganzen Hochzeit groß werden.</small></button>
+      <button class="btn" id="tIn">Datei übernehmen<small>Ersetzt alles auf diesem Gerät durch den Stand aus der Datei.</small></button>
+      <button class="btn" id="tClose">Schließen</button>
+    </div></div>`;
+  back.querySelector("#tPlan").onclick = () => { close(); exportBackup(false); };
+  back.querySelector("#tAll").onclick = () => { close(); exportBackup(true); };
+  back.querySelector("#tIn").onclick = e => {
+    const b = e.currentTarget;
+    if(state.posts.length && !b.dataset.armed){ b.dataset.armed = "1"; b.firstChild.textContent = "Ersetzt alles hier. Nochmal tippen zum Auswählen"; return; }
+    close(); $("#fileBackup").click();
+  };
+  back.querySelector("#tClose").onclick = close;
+  app.appendChild(back);
+}
+$("#transferBtn").onclick = transferDialog;
+$("#fileBackup").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if(f) importBackup(f); });
+
 /* ---------- Start ---------- */
 (async () => {
   db = await openDB();
@@ -1055,6 +1429,7 @@ $("#igBtn").onclick = igDialog;
   if(!db) toast("Speichern nicht möglich: Daten gehen beim Schließen verloren");
   ensureLayouts();
   renderAlbums(); renderStrip(); setupSortable(); renderViews(); renderGrid();
+  if(state.board) setBoard(true);
   igAuto();
   document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") igAuto(); });
 })();
