@@ -145,6 +145,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
         <button id="modeGrid" aria-pressed="true">Grid</button>
         <button id="modePost" aria-pressed="false">Posting</button>
       </div>
+      <button class="iconbtn" id="igOrder" hidden aria-label="Reihenfolge von Instagram übernehmen" title="Reihenfolge von Instagram übernehmen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg></button>
       <button class="iconbtn" id="igBtn" aria-label="Instagram-Verbindung"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r=".6" fill="currentColor"/></svg><span class="dot" id="igDot"></span></button>
     </div>
   </div>
@@ -293,6 +294,7 @@ function renderStats(){
   $("#stats").textContent = `${ig && ig.user ? "@" + ig.user + " · " : ""}${pl} geplant · ${state.posts.length - pl} gepostet`;
   const dot = $("#igDot");
   dot.className = "dot" + (ig && ig.token ? (ig.error ? " bad" : " ok") : "");
+  $("#igOrder").hidden = !(ig && ig.token);
 }
 
 function renderGrid(){
@@ -698,7 +700,7 @@ async function resolveTarget(ig){
   return r;
 }
 
-async function igSync(silent){
+async function igSync(silent, reorder){
   const ig = state.ig;
   if(!ig || !ig.token || syncing) return false;
   syncing = true; $("#igBtn").classList.add("spin");
@@ -715,9 +717,18 @@ async function igSync(silent){
       url = j.paging && j.paging.next;
     }
     const r = mergeIg(items, !url);
+    if(reorder){
+      // Gepostete Bilder exakt in der Reihenfolge, die Instagram liefert; geplante bleiben oben, eigene Uploads ganz unten
+      const pos = new Map(items.map((m, i) => [m.id, i]));
+      const planned = state.posts.filter(p => p.status === "planned");
+      const fromIg = state.posts.filter(p => p.status !== "planned" && p.igId && pos.has(p.igId)).sort((a, b) => pos.get(a.igId) - pos.get(b.igId));
+      const rest = state.posts.filter(p => !planned.includes(p) && !fromIg.includes(p));
+      state.posts = [...planned, ...fromIg, ...rest];
+    }
     ig.lastSync = Date.now(); ig.error = "";
     save(); renderGrid(); renderStrip();
-    if(r.matched) toast(r.matched === 1 ? "Geplanter Post ist jetzt online ✓" : `${r.matched} geplante Posts sind online ✓`);
+    if(reorder) toast("Reihenfolge von Instagram übernommen");
+    else if(r.matched) toast(r.matched === 1 ? "Geplanter Post ist jetzt online ✓" : `${r.matched} geplante Posts sind online ✓`);
     else if(!silent) toast(r.added ? `${r.added} Posts von Instagram geladen` : "Alles aktuell");
     return true;
   }catch(e){
@@ -799,6 +810,7 @@ function igDialog(){
   app.appendChild(back);
 }
 $("#igBtn").onclick = igDialog;
+$("#igOrder").onclick = () => igSync(false, true);
 
 /* ---------- Start ---------- */
 (async () => {
