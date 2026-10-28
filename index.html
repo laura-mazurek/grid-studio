@@ -1454,18 +1454,33 @@ async function pullImg(pid){
     return rec;
   }catch(e){ return null; }
 }
-async function readRemote(){
-  const r = await gh("contents/state.json");
+async function readRemote(ref){
+  const path = "contents/state.json" + (ref ? "?ref=" + ref : "");
+  const r = await gh(path);
   if(r.status === 404) return null;
   if(!r.ok) throw new Error("GitHub antwortet " + r.status);
   const j = await r.json();
-  syncSha = j.sha;
+  if(!ref) syncSha = j.sha;
   let text = j.content ? b64ToText(j.content) : "";
-  if(!text){ const raw = await gh("contents/state.json", {raw: true}); text = await raw.text(); }
+  if(!text){ const raw = await gh(path, {raw: true}); text = await raw.text(); }
   return JSON.parse(text);
+}
+// Kurzbeschreibung eines Stands für Auswahl und Wiederherstellung
+function summary(st){
+  const posts = st && st.posts || [], pl = posts.filter(p => p.status === "planned").length;
+  return `${pl} geplant · ${posts.length - pl} gepostet · ${(st.layouts || []).filter(l => l.id !== "ig").length} Versionen${st.ig && st.ig.user ? " · @" + st.ig.user : ""}`;
+}
+// Vor jedem Überschreiben eine lokale Kopie ablegen (die letzten 10 bleiben)
+async function snapshot(){
+  const raw = JSON.stringify(state);
+  if(!state.posts.length) return;
+  await idb("kv", "readwrite", s => s.put(raw, "snap-" + Date.now()));
+  const keys = ((await idb("kv", "readonly", s => s.getAllKeys())) || []).filter(k => String(k).startsWith("snap-")).sort();
+  for(const k of keys.slice(0, Math.max(0, keys.length - 10))) await idb("kv", "readwrite", s => s.delete(k));
 }
 // Entfernten Stand übernehmen, eigene nur-lokale Alben und Geräte-Einstellungen behalten
 function applyRemote(rs){
+  snapshot();
   const keep = {};
   for(const id of Object.keys(state.photos)){
     const ph = state.photos[id];
@@ -1489,8 +1504,10 @@ async function syncPull(){
     syncState = "busy"; renderStats();
     const rs = await readRemote();
     syncReady = true;
-    if(rs && (rs.updatedAt || 0) > (state.updatedAt || 0)) applyRemote(rs);
-    else if(!rs || (rs.updatedAt || 0) < (state.updatedAt || 0)) schedulePush(true);
+    const remoteEmpty = !rs || !(rs.posts || []).length;
+    if(remoteEmpty && state.posts.length){ if(!state.updatedAt) state.updatedAt = Date.now(); schedulePush(true); }
+    else if(rs && (rs.updatedAt || 0) > (state.updatedAt || 0)) applyRemote(rs);
+    else if(rs && (rs.updatedAt || 0) < (state.updatedAt || 0)) schedulePush(true);
     syncState = "";
   }catch(e){ syncState = "err"; }
   syncReady = true; renderStats();
@@ -1539,7 +1556,72 @@ async function syncConnect(token, repo){
   catch(e){ syncCfg = null; throw new Error("Keine Verbindung zu GitHub. Bitte Internet und den Repo-Namen prüfen."); }
   if(r.status === 404 || r.status === 401 || r.status === 403){ syncCfg = null; throw new Error(r.status === 404 ? "Repo nicht gefunden oder der Token darf nicht darauf zugreifen." : "Der Token wird nicht akzeptiert."); }
   await idb("kv", "readwrite", s => s.put(JSON.stringify(syncCfg), "sync"));
-  syncReady = false; await syncPull();
+  const rs = await readRemote();
+  syncReady = true;
+  const remoteHas = rs && (rs.posts || []).length, localHas = state.posts.length;
+  let take = remoteHas && !localHas ? "cloud" : "local";
+  if(remoteHas && localHas) take = await chooseSide(summary(state), summary(rs));
+  if(take === "cloud") applyRemote(rs);
+  else{ state.updatedAt = Date.now(); save(); }
+  renderStats();
+}
+function chooseSide(localSum, remoteSum){
+  return new Promise(res => {
+    const back = document.createElement("div"); back.className = "dialog-back";
+    back.innerHTML = `<div class="dialog wide"><b>Welcher Stand soll gelten?</b>
+      <p>Auf diesem Gerät und in der Cloud liegen unterschiedliche Daten. Der andere Stand wird vorher gesichert und lässt sich unter „Frühere Stände“ zurückholen.</p>
+      <div class="stackbtns"><button class="btn primary" id="cLocal">Diesen Stand behalten<small></small></button>
+      <button class="btn" id="cCloud">Stand aus der Cloud übernehmen<small></small></button></div></div>`;
+    back.querySelector("#cLocal small").textContent = localSum;
+    back.querySelector("#cCloud small").textContent = remoteSum;
+    back.querySelector("#cLocal").onclick = () => { back.remove(); res("local"); };
+    back.querySelector("#cCloud").onclick = () => { back.remove(); res("cloud"); };
+    app.appendChild(back);
+  });
+}
+
+// Frühere Stände: lokale Sicherungen und der Verlauf im GitHub-Repo
+async function historyDialog(){
+  const back = document.createElement("div"); back.className = "dialog-back";
+  const close = () => back.remove();
+  back.addEventListener("click", e => { if(e.target === back) close(); });
+  back.innerHTML = `<div class="dialog wide"><b>Frühere Stände</b><p>Wähle einen Stand. Der aktuelle wird vorher gesichert.</p>
+    <div class="stackbtns" id="hList"><p>Wird geladen …</p></div><button class="btn" id="hClose">Schließen</button></div>`;
+  back.querySelector("#hClose").onclick = close;
+  app.appendChild(back);
+  const items = [];
+  try{
+    const keys = ((await idb("kv", "readonly", s => s.getAllKeys())) || []).filter(k => String(k).startsWith("snap-"));
+    for(const k of keys){
+      try{ items.push({where: "Auf diesem Gerät gesichert", date: +String(k).slice(5), st: JSON.parse(await idb("kv", "readonly", s => s.get(k)))}); }catch(e){}
+    }
+  }catch(e){}
+  if(syncCfg){
+    try{
+      const r = await gh("commits?path=state.json&per_page=15");
+      const commits = r.ok ? await r.json() : [];
+      const got = await Promise.all(commits.map(c => readRemote(c.sha).then(st => ({where: "Cloud-Verlauf", date: Date.parse(c.commit.committer.date), st})).catch(() => null)));
+      got.forEach(x => { if(x && x.st) items.push(x); });
+    }catch(e){}
+  }
+  items.sort((a, b) => b.date - a.date);
+  const list = back.querySelector("#hList"); list.innerHTML = "";
+  if(!items.length){ list.innerHTML = "<p>Keine früheren Stände gefunden.</p>"; return; }
+  items.forEach(it => {
+    const b = document.createElement("button"); b.className = "btn";
+    b.innerHTML = "<span></span><small></small>";
+    b.firstChild.textContent = new Date(it.date).toLocaleString("de-AT", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}) + " · " + it.where;
+    b.lastChild.textContent = summary(it.st);
+    b.onclick = async () => {
+      if(!b.dataset.armed){ b.dataset.armed = "1"; b.firstChild.textContent = "Diesen Stand wiederherstellen? Nochmal tippen"; return; }
+      await snapshot();
+      applyRemote(it.st);
+      state.updatedAt = Date.now(); save();
+      close(); toast("Stand wiederhergestellt");
+      if(state.ig && state.ig.token) igSync(true);
+    };
+    list.appendChild(b);
+  });
 }
 
 /* ---------- Übertragen & Sichern ---------- */
@@ -1584,6 +1666,7 @@ async function importBackup(file){
     const {state: st, index, sync: sc} = JSON.parse(await file.slice(start, start + len).text());
     const base = start + len;
     toast("Wird übernommen …");
+    await snapshot();
     for(const id of Object.keys(index)){
       const rec = {};
       for(const k of Object.keys(index[id])){ const [o, l, t] = index[id][k]; rec[k] = file.slice(base + o, base + o + l, t); }
@@ -1622,6 +1705,7 @@ function transferDialog(){
     <div class="stackbtns">
       <button class="btn primary" id="tPlan">Datei erstellen: Planung<small>Versionen, Karussells, Instagram, Favoriten. Ohne unbenutzte Album-Fotos, daher klein.</small></button>
       <button class="btn" id="tAll">Datei erstellen: alles<small>Inklusive aller Album-Fotos. Kann bei einer ganzen Hochzeit groß werden.</small></button>
+      <button class="btn" id="tHist">Frühere Stände wiederherstellen<small>Lokale Sicherungen und, bei aktivem Sync, der Verlauf aus der Cloud</small></button>
       <button class="btn" id="tIn">Datei übernehmen<small>Ersetzt alles auf diesem Gerät durch den Stand aus der Datei.</small></button>
       <button class="btn" id="tClose">Schließen</button>
     </div></div>`;
@@ -1641,6 +1725,7 @@ function transferDialog(){
     try{ await syncConnect(tok, repo); close(); toast("Sync ist an"); }
     catch(e){ err.textContent = e.message; sGo.disabled = false; sGo.textContent = "Sync einschalten"; }
   };
+  back.querySelector("#tHist").onclick = () => { close(); historyDialog(); };
   back.querySelector("#tPlan").onclick = () => { close(); exportBackup(false); };
   back.querySelector("#tAll").onclick = () => { close(); exportBackup(true); };
   back.querySelector("#tIn").onclick = e => {
