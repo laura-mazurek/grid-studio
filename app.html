@@ -146,13 +146,15 @@ body.boardmode .app{max-width:none;height:100%;border:0;border-radius:0;box-shad
 .headbtn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:6px 11px;font-size:12px;font-weight:700}
 body.boardmode .headbtn{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 body.boardmode .seg{display:none}
-.board{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) 250px;border-top:1px solid var(--line)}
+.board{flex:1;min-height:0;display:grid;grid-template-columns:var(--w1,38%) 9px minmax(0,1fr) 9px var(--w3,300px);border-top:1px solid var(--line)}
+.split{cursor:col-resize;touch-action:none;background:linear-gradient(var(--line),var(--line)) center/1px 100% no-repeat;position:relative}
+.split::after{content:"";position:absolute;left:2px;top:50%;width:5px;height:36px;margin-top:-18px;border-radius:3px;background:var(--line)}
+.split:hover::after,.split.drag::after{background:var(--accent)}
+.mgrid div{cursor:grab}
 .bcol{min-width:0;overflow-y:auto;padding:16px max(16px,env(safe-area-inset-left,0px)) 40px 16px;display:flex;flex-direction:column;gap:14px}
-.bcol + .bcol{border-left:1px solid var(--line)}
 .bcol h2{font-family:var(--display);font-size:17px;margin:0;display:flex;align-items:baseline;gap:8px}
 .bcol h2 small{font-family:var(--body);font-size:12px;color:var(--muted);font-weight:500}
-@media (max-width:1150px){.board{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.bprev{display:none}}
-@media (max-width:760px){.board{display:block;overflow-y:auto}.bcol{overflow:visible}.bcol + .bcol{border-left:0;border-top:1px solid var(--line)}}
+@media (max-width:900px){.board{display:block;overflow-y:auto}.bcol{overflow:visible;border-top:1px solid var(--line)}.split{display:none}}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 .chips button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;color:var(--muted)}
 .chips button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
@@ -402,17 +404,17 @@ function orderOf(l){
   state.posts.forEach(p => { if(!seen.has(p.id)) out.push(p); });
   return out;
 }
-function viewPosts(){
-  const base = allViewPosts();
+function viewPosts(v = state.view, withHidden = showHidden){
+  const base = allViewPosts(v);
   const all = [...base.filter(p => p.pinned).sort((a, b) => b.pinned - a.pinned), ...base.filter(p => !p.pinned)];
-  return showHidden ? all : all.filter(p => !p.hidden);
+  return withHidden ? all : all.filter(p => !p.hidden);
 }
-function allViewPosts(){
-  if(state.view === "new"){
+function allViewPosts(v = state.view){
+  if(v === "new"){
     const planned = orderOf(layout("ig")).filter(p => p.status === "planned");
     return [...planned, ...state.posts.filter(p => p.status !== "planned").sort(byDate)];
   }
-  return orderOf(layout(state.view));
+  return orderOf(layout(v));
 }
 // Neuen Post in alle Ansichten einsortieren: in der aktuellen an die Ablagestelle, sonst geplante ganz oben,
 // gepostete direkt unter die geplanten (wie in Instagram) oder auf Wunsch ans Ende.
@@ -1322,19 +1324,56 @@ function renderBoard(){
   }));
 
   // --- Spalte 3: Grid-Vorschau
+  // Eigene Version „Karussell-Planung“: Schieben hier ändert nur diese, nicht Instagram oder andere Versionen
+  let bl = layout("board");
+  if(!bl){ bl = {id: "board", name: "Karussell-Planung", order: []}; resetToInstagram(bl); state.layouts.push(bl); save(); }
   const c3 = document.createElement("div"); c3.className = "bcol bprev";
-  const vname = state.view === "new" ? "Neueste zuerst" : layout(state.view).name;
-  c3.innerHTML = `<h2>Im Grid <small>${vname}</small></h2><div class="mgrid" id="bGrid"></div>
-    <p class="bhint">Grün = geplant, lila = aus diesem Album. Reihenfolge und Versionen änderst du in der Grid-Ansicht.</p>`;
+  c3.innerHTML = `<h2>Im Grid <small>Karussell-Planung</small></h2><div class="mgrid" id="bGrid"></div>
+    <p class="bhint">Kacheln verschieben ändert nur die Version „Karussell-Planung“. Grün = geplant, lila = aus diesem Album. Trennlinien ziehen = Bereiche breiter oder schmaler.</p>
+    <button class="minibtn" id="bReset">Auf Instagram zurücksetzen</button>`;
+  c3.querySelector("#bReset").onclick = e => {
+    const b = e.currentTarget;
+    if(!b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "Sicher? Nochmal tippen"; return; }
+    resetToInstagram(bl); save(); renderBoard(); toast("Karussell-Planung zurückgesetzt");
+  };
   const mg = c3.querySelector("#bGrid");
-  viewPosts().filter(p => !p.hidden).slice(0, 24).forEach(p => {
+  const mlist = viewPosts("board", false).slice(0, 36);
+  mlist.forEach(p => {
     const d = document.createElement("div");
     if(p.status === "planned") d.className = "planned" + (p.album === state.current ? " mine" : "");
     if(p.slides[0]) bg(d, p.slides[0].pid, p.slides[0].fx, p.slides[0].fy);
     mg.appendChild(d);
   });
+  boardSorts.push(Sortable.create(mg, {...touch, animation: 150, onEnd(e){
+    if(e.oldIndex === e.newIndex) return;
+    const ids = mlist.map(p => p.id), [m] = ids.splice(e.oldIndex, 1); ids.splice(e.newIndex, 0, m);
+    // Nicht gezeigte (ausgeblendete, weiter unten liegende) behalten ihren Platz
+    const vis = new Set(ids); let k = 0;
+    bl.order = orderOf(bl).map(p => vis.has(p.id) ? ids[k++] : p.id);
+    save(); renderBoard();
+  }}));
 
-  box.append(c1, c2, c3);
+  // Verstellbare Trennlinien zwischen den Spalten, Breiten pro Gerät merken
+  const s1 = document.createElement("div"), s2 = document.createElement("div");
+  s1.className = s2.className = "split"; s1.setAttribute("aria-hidden", "true"); s2.setAttribute("aria-hidden", "true");
+  try{ const w = JSON.parse(localStorage.getItem("gs-board-w") || "{}"); if(w.w1) box.style.setProperty("--w1", w.w1 + "px"); if(w.w3) box.style.setProperty("--w3", w.w3 + "px"); }catch(e){}
+  const drag = (sp, which) => sp.addEventListener("pointerdown", e => {
+    const total = box.clientWidth, w1 = c1.getBoundingClientRect().width, w3 = c3.getBoundingClientRect().width, x0 = e.clientX;
+    sp.setPointerCapture(e.pointerId); sp.classList.add("drag");
+    const move = ev => {
+      const dx = ev.clientX - x0;
+      if(which === 1) box.style.setProperty("--w1", Math.max(220, Math.min(total - w3 - 260, w1 + dx)) + "px");
+      else box.style.setProperty("--w3", Math.max(200, Math.min(total - w1 - 260, w3 - dx)) + "px");
+    };
+    const up = () => {
+      sp.classList.remove("drag"); sp.removeEventListener("pointermove", move); sp.removeEventListener("pointerup", up);
+      try{ localStorage.setItem("gs-board-w", JSON.stringify({w1: Math.round(c1.getBoundingClientRect().width), w3: Math.round(c3.getBoundingClientRect().width)})); }catch(e){}
+    };
+    sp.addEventListener("pointermove", move); sp.addEventListener("pointerup", up);
+  });
+  drag(s1, 1); drag(s2, 3);
+
+  box.append(c1, s1, c2, s2, c3);
   renderStats();
 }
 
