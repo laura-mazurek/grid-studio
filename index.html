@@ -1154,6 +1154,21 @@ function avgColor(pid, el){
   });
 }
 
+// Fotos endgültig aus dem Album entfernen, auch aus Karussells; leere Karussells fallen weg
+function deletePhotos(ids){
+  const set = new Set(ids);
+  state.posts.forEach(p => { if(p.slides.some(sl => set.has(sl.pid))) p.slides = p.slides.filter(sl => !set.has(sl.pid)); });
+  const gone = state.posts.filter(p => !p.slides.length).length;
+  state.posts = state.posts.filter(p => p.slides.length);
+  ids.forEach(id => {
+    delete state.photos[id]; delImg(id); localKeys.delete(id);
+    if(thumbs[id] && !thumbs[id].startsWith("http")) URL.revokeObjectURL(thumbs[id]);
+    delete thumbs[id]; delete fullURLs[id];
+  });
+  boardSel.clear(); save(); renderBoard();
+  toast(`${ids.length} Fotos gelöscht` + (gone ? `, ${gone} leere Karussells entfernt` : ""));
+}
+
 function setBoard(on){
   state.board = !!on; save();
   document.body.classList.toggle("boardmode", state.board);
@@ -1272,18 +1287,32 @@ function renderBoard(){
     b.onclick = () => { boardFilter = k; renderBoard(); }; fb.appendChild(b);
   });
   const sb = c2.querySelector("#bSel");
+  const shown = ids.filter(id => boardFilter === "all" || (boardFilter === "fav" ? state.photos[id].fav : !used.has(id)));
   sb.innerHTML = boardSel.size
-    ? `<b>${boardSel.size} ausgewählt</b><button class="minibtn" id="selFav">♥ alle markieren</button><button class="minibtn" id="selClear">Auswahl aufheben</button>`
-    : `<span class="bhint">Antippen = auswählen (Reihenfolge zählt) · ♥ = in die engere Wahl · Ziehen = direkt in ein Karussell</span>`;
+    ? `<b>${boardSel.size} ausgewählt</b><button class="minibtn" id="selFav">♥ alle markieren</button><button class="minibtn warn" id="selDel">Aus Album löschen</button><button class="minibtn" id="selClear">Auswahl aufheben</button>`
+    : `<span class="bhint">Antippen = auswählen (Reihenfolge zählt) · ♥ = in die engere Wahl · Ziehen = direkt in ein Karussell</span><button class="minibtn" id="selAll">Alle sichtbaren auswählen</button>`;
   if(boardSel.size){
     sb.querySelector("#selClear").onclick = () => { boardSel.clear(); renderBoard(); };
     sb.querySelector("#selFav").onclick = () => { boardSel.forEach(id => state.photos[id].fav = true); save(); renderBoard(); };
+    const del = sb.querySelector("#selDel");
+    del.onclick = () => {
+      const ids = [...boardSel], inUse = ids.filter(id => used.has(id)).length;
+      if(!del.dataset.armed){
+        del.dataset.armed = "1";
+        del.textContent = inUse === 1 ? "Sicher? 1 davon steckt in einem Karussell und wird dort auch entfernt" : inUse ? `Sicher? ${inUse} davon stecken in Karussells und werden dort auch entfernt` : `Sicher? ${ids.length} ${ids.length === 1 ? "Foto" : "Fotos"} löschen`;
+        return;
+      }
+      deletePhotos(ids);
+    };
+  }else{
+    const sa = sb.querySelector("#selAll");
+    sa.onclick = () => { shown.forEach(id => boardSel.add(id)); renderBoard(); };
   }
   const pool = c2.querySelector("#bPool");
-  const shown = ids.filter(id => boardFilter === "all" || (boardFilter === "fav" ? state.photos[id].fav : !used.has(id)));
+  const shown2 = ids.filter(id => boardFilter === "all" || (boardFilter === "fav" ? state.photos[id].fav : !used.has(id)));
   if(!state.current) pool.innerHTML = `<p class="bhint">Lade ein Album mit „＋ Album laden“, z. B. alle Bilder einer Hochzeit.</p>`;
-  else if(!shown.length) pool.innerHTML = `<p class="bhint">Keine Bilder für diesen Filter.</p>`;
-  shown.forEach(id => {
+  else if(!shown2.length) pool.innerHTML = `<p class="bhint">Keine Bilder für diesen Filter.</p>`;
+  shown2.forEach(id => {
     const d = document.createElement("div");
     const selIdx = [...boardSel].indexOf(id);
     d.className = "bph" + (used.has(id) ? " used" : "") + (selIdx >= 0 ? " sel" : "");
