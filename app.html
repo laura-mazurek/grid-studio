@@ -1418,7 +1418,7 @@ let syncCfg = null, syncSha = null, syncReady = false, pushTimer = null, pushing
 const localKeys = new Set();
 function syncLabel(){ return !syncCfg ? "" : syncState === "err" ? " · ☁︎ Sync-Fehler" : syncState === "busy" ? " · ☁︎ …" : " · ☁︎ synchron"; }
 async function gh(path, opts = {}){
-  return fetch(`https://api.github.com/repos/${syncCfg.repo}/${path}`, {
+  return fetch(`https://api.github.com/repos/${syncCfg.repo}${path ? "/" + path : ""}`, {
     method: opts.method || "GET", cache: "no-store", body: opts.body,
     headers: {Authorization: `Bearer ${syncCfg.token}`, Accept: opts.raw ? "application/vnd.github.raw" : "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
   });
@@ -1524,7 +1524,9 @@ async function syncPush(){
 }
 async function syncConnect(token, repo){
   syncCfg = {token, repo};
-  const r = await gh("");
+  let r;
+  try{ r = await gh(""); }
+  catch(e){ syncCfg = null; throw new Error("Keine Verbindung zu GitHub. Bitte Internet und den Repo-Namen prüfen."); }
   if(r.status === 404 || r.status === 401 || r.status === 403){ syncCfg = null; throw new Error(r.status === 404 ? "Repo nicht gefunden oder der Token darf nicht darauf zugreifen." : "Der Token wird nicht akzeptiert."); }
   await idb("kv", "readwrite", s => s.put(JSON.stringify(syncCfg), "sync"));
   syncReady = false; await syncPull();
