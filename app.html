@@ -1512,7 +1512,7 @@ async function pullImg(pid){
   if(!syncCfg) return null;
   try{
     const get = async k => { const r = await gh(`contents/img/${pid}.${k}.jpg`, {raw: true}); return r.ok ? new Blob([await r.arrayBuffer()], {type: "image/jpeg"}) : null; };
-    const [thumb, full] = await Promise.all([get("t"), get("f")]);
+    const thumb = await get("t"), full = thumb ? null : await get("f");
     if(!thumb && !full) return null;
     const rec = {thumb: thumb || full, full: full || thumb};
     await putImg(pid, rec); localKeys.add(pid);
@@ -1536,16 +1536,26 @@ function summary(st){
   return `${pl} geplant · ${posts.length - pl} gepostet · ${(st.layouts || []).filter(l => l.id !== "ig").length} Versionen${st.ig && st.ig.user ? " · @" + st.ig.user : ""}`;
 }
 // Vor jedem Überschreiben eine lokale Kopie ablegen (die letzten 10 bleiben)
-async function snapshot(){
-  const raw = JSON.stringify(state);
-  if(!state.posts.length) return;
+let lastSnap = 0;
+async function snapshot(force){
+  if(!state.posts.length || (!force && Date.now() - lastSnap < 30 * 60e3)) return;
+  lastSnap = Date.now();
+  const raw = JSON.stringify(slimState(state));
   await idb("kv", "readwrite", s => s.put(raw, "snap-" + Date.now()));
   const keys = ((await idb("kv", "readonly", s => s.getAllKeys())) || []).filter(k => String(k).startsWith("snap-")).sort();
   for(const k of keys.slice(0, Math.max(0, keys.length - 10))) await idb("kv", "readwrite", s => s.delete(k));
 }
+// Instagram-Bildadressen laufen ab und werden auf jedem Gerät neu geholt, also nicht mitspeichern (spart viel Platz)
+function slimState(st){
+  const out = JSON.parse(JSON.stringify(st));
+  for(const ph of Object.values(out.photos || {})) if(ph.album === "_ig") ph.remote = "";
+  return out;
+}
 // Entfernten Stand übernehmen, eigene nur-lokale Alben und Geräte-Einstellungen behalten
 function applyRemote(rs){
   snapshot();
+  // Eigene, noch gültige Instagram-Bildadressen behalten
+  for(const [id, ph] of Object.entries(rs.photos || {})) if(ph.album === "_ig" && !ph.remote && state.photos[id] && state.photos[id].remote) ph.remote = state.photos[id].remote;
   const keep = {};
   for(const id of Object.keys(state.photos)){
     const ph = state.photos[id];
@@ -1562,6 +1572,7 @@ function applyRemote(rs){
   save(true);
   renderAlbums(); renderViews(); renderGrid(); renderStrip();
   if(openPost && !postById(openPost.id)) closeSheet();
+  if(state.ig && state.ig.token && Object.values(state.photos).some(ph => ph.album === "_ig" && !ph.remote)) igSync(true);
 }
 async function syncPull(){
   if(!syncCfg) return;
@@ -1579,7 +1590,7 @@ async function syncPull(){
 }
 function schedulePush(now){
   if(!syncCfg || !syncReady) return;
-  clearTimeout(pushTimer); pushTimer = setTimeout(syncPush, now ? 50 : 2500);
+  clearTimeout(pushTimer); pushTimer = setTimeout(syncPush, now ? 50 : 10000);
 }
 async function syncPush(){
   if(!syncCfg || pushing) return;
@@ -1591,13 +1602,13 @@ async function syncPush(){
     for(const pid of need){
       const rec = await getImg(pid);
       if(!rec) continue;
+      // Nur die Vorschau (480 px, ca. 40 KB) – das reicht zum Anzeigen; die volle Auflösung bleibt auf dem Gerät mit dem Album
       const okT = await putFile(`img/${pid}.t.jpg`, await blobToB64(rec.thumb || rec.full));
-      const okF = await putFile(`img/${pid}.f.jpg`, await blobToB64(rec.full || rec.thumb));
-      if((okT.ok || okT.status === 422) && (okF.ok || okF.status === 422)) state.photos[pid].synced = true;
+      if(okT.ok || okT.status === 422) state.photos[pid].synced = true;
     }
     // Nur Fotos mitschicken, die auch woanders verfügbar sind
-    const out = JSON.parse(JSON.stringify(state));
-    out.photos = Object.fromEntries(Object.entries(state.photos).filter(([, ph]) => ph.remote || ph.synced));
+    const out = slimState(state);
+    out.photos = Object.fromEntries(Object.entries(out.photos).filter(([, ph]) => ph.album === "_ig" || ph.synced));
     out.albums = state.albums.filter(a => Object.values(out.photos).some(ph => ph.album === a.id));
     delete out.board; delete out.current;
     let r = await putFile("state.json", textToB64(JSON.stringify(out)), syncSha);
@@ -1679,7 +1690,7 @@ async function historyDialog(){
     b.lastChild.textContent = summary(it.st);
     b.onclick = async () => {
       if(!b.dataset.armed){ b.dataset.armed = "1"; b.firstChild.textContent = "Diesen Stand wiederherstellen? Nochmal tippen"; return; }
-      await snapshot();
+      await snapshot(true);
       applyRemote(it.st);
       state.updatedAt = Date.now(); save();
       close(); toast("Stand wiederhergestellt");
@@ -1731,7 +1742,7 @@ async function importBackup(file){
     const {state: st, index, sync: sc} = JSON.parse(await file.slice(start, start + len).text());
     const base = start + len;
     toast("Wird übernommen …");
-    await snapshot();
+    await snapshot(true);
     for(const id of Object.keys(index)){
       const rec = {};
       for(const k of Object.keys(index[id])){ const [o, l, t] = index[id][k]; rec[k] = file.slice(base + o, base + o + l, t); }
@@ -1765,7 +1776,7 @@ function transferDialog(){
        <p class="err" id="sErr"></p>
        <div class="stackbtns"><button class="btn primary" id="sGo">Sync einschalten</button></div>
        <p>Auf dem zweiten Gerät dasselbe einfügen. Oder unten eine Datei erstellen und dort übernehmen, dann kommt der Zugang mit.</p><hr style="border:0;border-top:1px solid var(--line);width:100%">`;
-  back.innerHTML = `<div class="dialog wide">${syncHtml}<b>Per Datei übertragen oder sichern</b>
+  back.innerHTML = `<div class="dialog wide">${syncHtml}<p id="storeInfo"></p><b>Per Datei übertragen oder sichern</b>
     <p>Grid Studio speichert alles nur auf dem Gerät, auf dem du es benutzt. So kommt dein Stand aufs andere Gerät: hier eine Datei erstellen, per AirDrop schicken, dort öffnen und übernehmen. Die Instagram-Verbindung kommt mit.</p>
     <div class="stackbtns">
       <button class="btn primary" id="tPlan">Datei erstellen: Planung<small>Versionen, Karussells, Instagram, Favoriten. Ohne unbenutzte Album-Fotos, daher klein.</small></button>
@@ -1791,6 +1802,11 @@ function transferDialog(){
     catch(e){ err.textContent = e.message; sGo.disabled = false; sGo.textContent = "Sync einschalten"; }
   };
   back.querySelector("#tHist").onclick = () => { close(); historyDialog(); };
+  if(navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(est => {
+    const mb = n => n > 1e9 ? (n / 1e9).toFixed(1) + " GB" : Math.round(n / 1e6) + " MB";
+    const el = back.querySelector("#storeInfo");
+    if(el) el.textContent = `Speicher auf diesem Gerät: ${mb(est.usage || 0)} belegt${est.quota ? " von " + mb(est.quota) : ""}. Größter Posten sind Album-Fotos; unbenutzte löschst du im Board mit Filter „Unbenutzt“.`;
+  }).catch(() => {});
   back.querySelector("#tPlan").onclick = () => { close(); exportBackup(false); };
   back.querySelector("#tAll").onclick = () => { close(); exportBackup(true); };
   back.querySelector("#tIn").onclick = e => {
@@ -1814,7 +1830,7 @@ $("#fileBackup").addEventListener("change", e => { const f = e.target.files[0]; 
   // Aufräumen: Posts ohne vorhandene Bilder entfernen
   const keys = new Set(await allImgKeys() || []);
   if(db){
-    for(const id of Object.keys(state.photos)) if(!keys.has(id) && !state.photos[id].remote && !state.photos[id].synced) delete state.photos[id];
+    for(const id of Object.keys(state.photos)) if(!keys.has(id) && !state.photos[id].remote && !state.photos[id].synced && state.photos[id].album !== "_ig") delete state.photos[id];
     state.posts.forEach(p => p.slides = p.slides.filter(s => state.photos[s.pid]));
     state.posts = state.posts.filter(p => p.slides.length);
   }
@@ -1824,6 +1840,8 @@ $("#fileBackup").addEventListener("change", e => { const f = e.target.files[0]; 
   renderAlbums(); renderStrip(); setupSortable(); renderViews(); renderGrid();
   if(state.board) setBoard(true);
   (await allImgKeys() || []).forEach(k => localKeys.add(k));
+  // Browser bitten, die Daten nicht automatisch zu löschen, wenn das Gerät knapp wird
+  try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
   try{ const sc = await idb("kv", "readonly", s => s.get("sync")); if(sc) syncCfg = JSON.parse(sc); }catch(e){}
   // Reihenfolge wichtig: zuerst den neuesten Stand holen, dann erst Instagram prüfen (das speichert)
   const refresh = async () => { await syncPull(); igAuto(); };
