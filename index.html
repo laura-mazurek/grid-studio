@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Grid Studio">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="gs-build" content="20261028115045">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
 <title>Grid Studio</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -1986,6 +1990,26 @@ function transferDialog(){
 $("#transferBtn").onclick = transferDialog;
 $("#fileBackup").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if(f) importBackup(f); });
 
+/* ---------- Updates erkennen (nur in der gehosteten Version) ---------- */
+// Vergleicht die eigene Versionskennung mit der aktuell veröffentlichten und bietet „Aktualisieren“ an.
+const BUILD = (document.querySelector('meta[name="gs-build"]') || {}).content;
+let updateShown = false;
+async function checkUpdate(){
+  if(!BUILD || updateShown || !/^https?:/.test(location.protocol)) return;
+  try{
+    const html = await (await fetch(location.pathname + "?v=" + Date.now(), {cache: "no-store"})).text();
+    const m = html.match(/name="gs-build" content="(\d+)"/);
+    if(m && m[1] !== BUILD){
+      updateShown = true; flush();
+      const bar = document.createElement("button");
+      bar.className = "pill"; bar.textContent = "Neue Version verfügbar · tippen zum Aktualisieren";
+      bar.style.cssText = "position:absolute;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:20;box-shadow:0 6px 20px rgba(0,0,0,.25)";
+      bar.onclick = () => { flush(); setTimeout(() => location.reload(), 150); };
+      app.appendChild(bar);
+    }
+  }catch(e){}
+}
+
 /* ---------- Start ---------- */
 (async () => {
   db = await openDB();
@@ -2013,10 +2037,11 @@ $("#fileBackup").addEventListener("change", e => { const f = e.target.files[0]; 
   const refresh = async () => { await syncPull(); igAuto(); };
   refresh();
   document.addEventListener("visibilitychange", () => {
-    if(document.visibilityState === "visible") refresh();
+    if(document.visibilityState === "visible"){ refresh(); checkUpdate(); }
     else if(pushTimer){ clearTimeout(pushTimer); syncPush(); }
   });
   setInterval(() => { if(document.visibilityState === "visible" && syncCfg && !pushing) syncPull(); }, 45e3);
+  checkUpdate(); setInterval(() => { if(document.visibilityState === "visible") checkUpdate(); }, 10 * 60e3);
 })();
 })();
 </script>
