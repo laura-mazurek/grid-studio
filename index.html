@@ -176,9 +176,9 @@ body.boardmode .seg{display:none}
 .minibtn{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:4px 9px;font-size:12px;font-weight:600}
 .minibtn.go{background:var(--plan);border-color:var(--plan);color:var(--plan-ink)}
 .minibtn.warn{color:var(--danger)}
-.bslides{display:flex;gap:6px;overflow-x:auto;min-height:118px;padding:2px 2px 6px;align-items:flex-start}
+.bslides{display:flex;gap:6px;overflow-x:auto;min-height:calc(var(--sw,86px) * 1.25 + 12px);padding:2px 2px 6px;align-items:flex-start}
 .bslides:empty::before{content:"Bilder hierher ziehen";color:var(--muted);font-size:12px;align-self:center;padding-left:6px}
-.bs{flex:none;width:86px;aspect-ratio:4/5;border-radius:6px;background:var(--chip) center/cover no-repeat;position:relative;cursor:grab;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.bs{flex:none;width:var(--sw,86px);cursor:pointer;aspect-ratio:4/5;border-radius:6px;background:var(--chip) center/cover no-repeat;position:relative;cursor:grab;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .bs .n{position:absolute;left:4px;top:4px;background:#fff;color:#1D1B22;font-size:10px;font-weight:700;border-radius:4px;padding:0 4px;font-variant-numeric:tabular-nums}
 .bs .x{position:absolute;right:-5px;top:-5px;width:20px;height:20px;border-radius:50%;border:0;background:var(--ink);color:var(--bg);font-size:12px;line-height:20px;padding:0;display:none}
 .bs:hover .x,.bs:focus-within .x{display:block}
@@ -187,7 +187,7 @@ body.boardmode .seg{display:none}
 .cstrip span{flex:1}
 .newrow{border:1.5px dashed var(--line);border-radius:14px;min-height:96px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;text-align:center;padding:10px;gap:6px;flex-wrap:wrap}
 .newrow .bph{display:none}
-.pool{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px}
+.pool{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--pw,104px),1fr));gap:6px}
 .bph{aspect-ratio:4/5;border-radius:6px;background:var(--chip) center/cover no-repeat;position:relative;cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .bph.used{opacity:.4}
 .bph.sel{box-shadow:0 0 0 3px var(--accent)}
@@ -200,6 +200,11 @@ body.boardmode .seg{display:none}
 .eyebtn svg{width:16px;height:16px}
 /* Foto-Betrachter */
 .viewer{position:absolute;inset:0;z-index:9;background:#0E0D11;color:#fff;display:flex;flex-direction:column}
+.cmp{flex:1;min-height:0;overflow-y:auto;display:grid;gap:8px;padding:0 12px 12px;align-content:start}
+.cmp .cell{position:relative;aspect-ratio:4/5;background:#000 center/contain no-repeat;border-radius:6px;cursor:zoom-in}
+.cmp .cell .tag{position:absolute;left:6px;top:6px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:2px 7px;border-radius:6px}
+.cmp .cell .cf{position:absolute;right:6px;top:6px;border:0;border-radius:999px;background:rgba(0,0,0,.55);color:#fff;font-size:13px;padding:4px 9px}
+.cmp .cell .cf.on{background:#fff;color:#C2185B}
 .viewer .vbar{display:flex;align-items:center;gap:8px;padding:10px 14px;flex-wrap:wrap}
 .viewer .vbar .sp{flex:1;font-size:13px;color:#bbb;font-variant-numeric:tabular-nums}
 .viewer .vbtn{border:1px solid #444;background:#1c1b21;color:#fff;border-radius:999px;padding:7px 14px;font-size:13px;font-weight:700}
@@ -266,7 +271,7 @@ body.boardmode .seg{display:none}
   <div class="tray" id="tray">
     <div class="albums" id="albums"></div>
     <div class="strip" id="strip"></div>
-    <div class="trayfoot"><span id="hint">Foto nach oben ziehen = neuer Post</span><button class="linkbtn" id="delAlbum" hidden>Album entfernen</button></div>
+    <div class="trayfoot"><span id="hint">Foto nach oben ziehen = neuer Post</span><span style="display:flex;gap:12px"><button class="linkbtn" id="addMore" hidden>＋ Fotos hinzufügen</button><button class="linkbtn" id="delAlbum" hidden>Album entfernen</button></span></div>
   </div>
 
   <div class="sheet" id="sheet" aria-hidden="true">
@@ -289,6 +294,7 @@ body.boardmode .seg{display:none}
   <input type="file" id="fileAlbum" accept="image/*" multiple hidden>
   <input type="file" id="filePosted" accept="image/*" multiple hidden>
   <input type="file" id="fileBackup" hidden>
+  <input type="file" id="fileAdd" accept="image/*" multiple hidden>
 </div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
@@ -680,13 +686,14 @@ function renderAlbums(){
   add.className = "add"; add.textContent = "＋ Album";
   add.onclick = () => $("#fileAlbum").click();
   box.appendChild(add);
+  $("#addMore").hidden = !state.current;
   const del = $("#delAlbum"); del.hidden = !state.current; del.textContent = "Album entfernen"; del.classList.remove("warn"); del.dataset.armed = "";
 }
 
 function renderStrip(){
   if(state.board) renderBoard();
   strip.innerHTML = "";
-  const ids = Object.keys(state.photos).filter(id => state.photos[id].album === state.current);
+  const ids = albumIds(state.current);
   if(!state.current || !ids.length){
     strip.innerHTML = `<span class="none">${state.albums.length ? "Album wählen" : "Noch kein Album. Tipp auf „＋ Album“ und wähl deine Fotos aus."}</span>`;
     return;
@@ -897,7 +904,19 @@ async function newAlbumFrom(files){
   save(); renderStrip(); toast(`${ids.length} Fotos in „${name}“`);
 }
 $("#fileAlbum").addEventListener("change", e => { newAlbumFrom(e.target.files); e.target.value = ""; });
+async function addToAlbum(files){
+  files = [...files].filter(f => f.type.startsWith("image/"));
+  const a = state.albums.find(x => x.id === state.current);
+  if(!files.length || !a) return;
+  toast(`${files.length} Fotos werden zu „${a.name}“ hinzugefügt …`);
+  const ids = await ingest(files, a.id, (i, n) => { $("#hint").textContent = `Fotos werden geladen … ${i}/${n}`; });
+  $("#hint").textContent = "Foto nach oben ziehen = neuer Post";
+  a.order = [...albumIds(a.id).filter(id => !ids.includes(id)), ...ids];
+  save(); renderStrip(); toast(`${ids.length} Fotos hinzugefügt`);
+}
+$("#fileAdd").addEventListener("change", e => { addToAlbum(e.target.files); e.target.value = ""; });
 $("#addPosted").onclick = () => $("#filePosted").click();
+$("#addMore").onclick = () => $("#fileAdd").click();
 $("#toggleHidden").onclick = () => { showHidden = !showHidden; renderGrid(); };
 $("#filePosted").addEventListener("change", async e => {
   const files = [...e.target.files]; e.target.value = "";
@@ -1154,8 +1173,19 @@ function igDialog(){
 $("#igBtn").onclick = igDialog;
 
 /* ---------- Board: Hochzeit auf mehrere Karussells aufteilen ---------- */
+// Fotos eines Albums in der gespeicherten Reihenfolge (neue hinten)
+function albumIds(aid){
+  const a = state.albums.find(x => x.id === aid);
+  const all = Object.keys(state.photos).filter(id => state.photos[id].album === aid);
+  if(!a || !a.order) return all;
+  const set = new Set(all), out = a.order.filter(id => set.has(id)), seen = new Set(out);
+  all.forEach(id => { if(!seen.has(id)) out.push(id); });
+  return out;
+}
 // Jede Reihe ist ein geplanter Post mit album = aktuelles Album. Pool = alle Fotos des Albums.
-let boardFilter = "all", boardSorts = [];
+let boardFilter = "all", boardSorts = [], boardZoom = "m";
+try{ boardZoom = localStorage.getItem("gs-zoom") || "m"; }catch(e){}
+const ZOOM = {s: [80, 64], m: [110, 86], l: [170, 120], xl: [260, 170]};
 const boardSel = new Set();
 function boardPosts(){ return state.posts.filter(p => p.status === "planned" && p.album && p.album === state.current); }
 
@@ -1217,6 +1247,8 @@ function renderBoard(){
   const box = $("#board");
   boardSorts.forEach(x => x.destroy()); boardSorts = [];
   box.innerHTML = "";
+  const z = ZOOM[boardZoom] || ZOOM.m;
+  box.style.setProperty("--pw", z[0] + "px"); box.style.setProperty("--sw", z[1] + "px");
   const touch = {delay: 160, delayOnTouchOnly: true, touchStartThreshold: 4};
   const used = usedIds();
 
@@ -1236,6 +1268,7 @@ function renderBoard(){
         <span class="crow-meta${over ? " warn" : ""}">${p.slides.length} Slides${over ? " · max. 20!" : ""} · ${fmtDate(p.when)}</span>
         ${boardSel.size ? `<button class="minibtn go" data-act="addsel">＋ ${boardSel.size} ausgewählte</button>` : ""}
         <button class="scope${p.scope ? "" : " all"}" data-act="scope" title="${p.scope ? "Nur in der Karussell-Planung. Tippen = in alle Versionen übernehmen" : "In allen Versionen. Tippen = nur Karussell-Planung"}">${p.scope ? "nur Planung" : "in allen Versionen"}</button>
+        <button class="minibtn" data-act="big">Alle groß</button>
         <button class="minibtn" data-act="prev">Vorschau</button>
         <button class="minibtn" data-act="edit">Details</button>
         <button class="minibtn warn" data-act="del">Löschen</button></div>
@@ -1247,6 +1280,7 @@ function renderBoard(){
       const d = document.createElement("div"); d.className = "bs"; d.dataset.pid = sl.pid;
       bg(d, sl.pid, sl.fx, sl.fy);
       d.innerHTML = `<span class="n">${i + 1}</span><button class="x" aria-label="Slide entfernen">×</button>`;
+      d.addEventListener("click", e => { if(!e.target.classList.contains("x")) photoViewer(p.slides.map(x => x.pid), i); });
       d.querySelector(".x").onclick = e => { e.stopPropagation(); p.slides.splice(i, 1); dropEmpty(p); save(); renderBoard(); };
       list.appendChild(d);
       const cs = document.createElement("span"); strip.appendChild(cs); avgColor(sl.pid, cs);
@@ -1259,6 +1293,7 @@ function renderBoard(){
         add.forEach(pid => p.slides.push({pid, fx: .5, fy: .5})); boardSel.clear(); save(); renderBoard();
       }
       if(a === "prev") igPreview(p);
+      if(a === "big") compareView(p.slides.map(x => x.pid), p.title || "Karussell");
       if(a === "eye"){ p.hidden = !p.hidden; save(); renderBoard(); toast(p.hidden ? "Im Feed ausgeblendet, bleibt geplant" : "Wieder im Feed"); }
       if(a === "scope"){
         if(p.scope){ p.scope = null; placePost(p); toast("Jetzt in allen Versionen geplant"); }
@@ -1300,21 +1335,29 @@ function renderBoard(){
 
   // --- Spalte 2: alle Bilder des Albums
   const c2 = document.createElement("div"); c2.className = "bcol";
-  const ids = Object.keys(state.photos).filter(id => state.photos[id].album === state.current);
+  const ids = albumIds(state.current);
   const favs = ids.filter(id => state.photos[id].fav).length, free = ids.filter(id => !used.has(id)).length;
   c2.innerHTML = `<h2>Bilder <small>${ids.length} im Album · ${favs} ♥ · ${free} unbenutzt</small></h2>
     <div class="chips" id="bAlbums"></div>
     <div class="chips" id="bFilter"></div>
     <div class="selbar" id="bSel"></div>
     <div class="pool" id="bPool"></div>`;
-  const ab = c2.querySelector("#bAlbums");
+  const ab = c2.querySelector("#bAlbums"), fb = c2.querySelector("#bFilter");
   state.albums.forEach(a => {
     const b = document.createElement("button"); b.textContent = a.name; b.setAttribute("aria-pressed", a.id === state.current);
     b.onclick = () => { state.current = a.id; boardSel.clear(); save(); renderBoard(); };
     ab.appendChild(b);
   });
-  const addA = document.createElement("button"); addA.className = "add"; addA.textContent = "＋ Album laden"; addA.onclick = () => $("#fileAlbum").click(); ab.appendChild(addA);
-  const fb = c2.querySelector("#bFilter");
+  if(state.current){ const addF = document.createElement("button"); addF.className = "add"; addF.textContent = "＋ Fotos in dieses Album"; addF.onclick = () => $("#fileAdd").click(); ab.appendChild(addF); }
+  const addA = document.createElement("button"); addA.className = "add"; addA.textContent = "＋ Neues Album"; addA.onclick = () => $("#fileAlbum").click(); ab.appendChild(addA);
+  // Kachelgröße
+  const zb = document.createElement("span"); zb.className = "chips"; zb.style.marginLeft = "auto";
+  [["s", "S"], ["m", "M"], ["l", "L"], ["xl", "XL"]].forEach(([k, label]) => {
+    const b = document.createElement("button"); b.textContent = label; b.title = "Bildgröße"; b.setAttribute("aria-pressed", boardZoom === k);
+    b.onclick = () => { boardZoom = k; try{ localStorage.setItem("gs-zoom", k); }catch(e){} renderBoard(); };
+    zb.appendChild(b);
+  });
+  fb.appendChild(zb);
   [["all", "Alle"], ["fav", "♥ Favoriten"], ["free", "Unbenutzt"]].forEach(([k, label]) => {
     const b = document.createElement("button"); b.textContent = label; b.setAttribute("aria-pressed", boardFilter === k);
     b.onclick = () => { boardFilter = k; renderBoard(); }; fb.appendChild(b);
@@ -1322,10 +1365,11 @@ function renderBoard(){
   const sb = c2.querySelector("#bSel");
   const shown = ids.filter(id => boardFilter === "all" || (boardFilter === "fav" ? state.photos[id].fav : !used.has(id)));
   sb.innerHTML = boardSel.size
-    ? `<b>${boardSel.size} ausgewählt</b><button class="minibtn" id="selFav">♥ alle markieren</button><button class="minibtn warn" id="selDel">Aus Album löschen</button><button class="minibtn" id="selClear">Auswahl aufheben</button>`
+    ? `<b>${boardSel.size} ausgewählt</b><button class="minibtn go" id="selCmp">Vergleichen</button><button class="minibtn" id="selFav">♥ alle markieren</button><button class="minibtn warn" id="selDel">Aus Album löschen</button><button class="minibtn" id="selClear">Auswahl aufheben</button>`
     : `<span class="bhint">Bild antippen = groß ansehen · ○ = auswählen (Reihenfolge zählt) · ♥ = Favorit · Ziehen = direkt in ein Karussell</span><button class="minibtn" id="selAll">Alle sichtbaren auswählen</button>`;
   if(boardSel.size){
     sb.querySelector("#selClear").onclick = () => { boardSel.clear(); renderBoard(); };
+    sb.querySelector("#selCmp").onclick = () => compareView([...boardSel], "Auswahl");
     sb.querySelector("#selFav").onclick = () => { boardSel.forEach(id => state.photos[id].fav = true); save(); renderBoard(); };
     const del = sb.querySelector("#selDel");
     del.onclick = () => {
@@ -1356,7 +1400,14 @@ function renderBoard(){
     d.onclick = () => photoViewer(shown2, shown2.indexOf(id));
     pool.appendChild(d);
   });
-  boardSorts.push(Sortable.create(pool, {...touch, group: {name: "board", pull: "clone", put: true}, sort: false, draggable: ".bph", filter: ".fav,.pick", preventOnFilter: false,
+  boardSorts.push(Sortable.create(pool, {...touch, group: {name: "board", pull: "clone", put: true}, sort: true, animation: 150,
+    onUpdate(e){
+      // Reihenfolge der sichtbaren Fotos ändern, ausgefilterte behalten ihren Platz
+      const vis = [...shown2], [m] = vis.splice(e.oldIndex, 1); vis.splice(e.newIndex, 0, m);
+      const set = new Set(vis), a = state.albums.find(x => x.id === state.current); let k = 0;
+      a.order = albumIds(state.current).map(id => set.has(id) ? vis[k++] : id);
+      save(); renderBoard();
+    }, draggable: ".bph", filter: ".fav,.pick", preventOnFilter: false,
     onAdd(e){
       const src = e.from.dataset.post && postById(e.from.dataset.post);
       e.item.remove();
@@ -1417,6 +1468,31 @@ function renderBoard(){
 
   box.append(c1, s1, c2, s2, c3);
   renderStats();
+}
+
+// Mehrere Bilder groß nebeneinander, z. B. ein ganzes Karussell oder die Auswahl
+function compareView(ids, title){
+  if(!ids.length) return;
+  const ov = document.createElement("div"); ov.className = "viewer";
+  const cols = ids.length === 1 ? 1 : ids.length <= 4 ? 2 : ids.length <= 9 ? 3 : 4;
+  ov.innerHTML = `<div class="vbar"><span class="sp"></span><button class="vbtn" id="cmpClose">Fertig</button></div><div class="cmp" style="grid-template-columns:repeat(${cols},minmax(0,1fr))"></div>
+    <div class="vhint">Bild antippen = einzeln groß · ♥ = Favorit · Esc = schließen</div>`;
+  ov.querySelector(".sp").textContent = `${title} · ${ids.length} Bilder`;
+  const box = ov.querySelector(".cmp");
+  ids.forEach((id, i) => {
+    const c = document.createElement("div"); c.className = "cell";
+    c.innerHTML = `<span class="tag">${i + 1}</span><button class="cf${state.photos[id] && state.photos[id].fav ? " on" : ""}">♥</button>`;
+    if(thumbs[id]) c.style.backgroundImage = `url("${thumbs[id]}")`;
+    fullURL(id).then(u => { if(u) c.style.backgroundImage = `url("${u}")`; });
+    c.querySelector(".cf").onclick = e => { e.stopPropagation(); const ph = state.photos[id]; if(!ph) return; ph.fav = !ph.fav; save(); e.target.classList.toggle("on", ph.fav); };
+    c.onclick = () => photoViewer(ids, i);
+    box.appendChild(c);
+  });
+  const key = e => { if(e.key === "Escape" && !document.querySelector(".viewer .vimg")) close(); };
+  const close = () => { ov.remove(); document.removeEventListener("keydown", key); if(state.board) renderBoard(); };
+  document.addEventListener("keydown", key);
+  ov.querySelector("#cmpClose").onclick = close;
+  app.appendChild(ov);
 }
 
 // Album-Fotos groß durchblättern: ←/→ blättern, F = Favorit, Leertaste = auswählen, Esc = schließen
