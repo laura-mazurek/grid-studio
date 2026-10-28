@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="gs-build" content="20261028124609">
+<meta name="gs-build" content="20261028125235">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
 <title>Grid Studio</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -424,8 +424,9 @@ function bg(el, pid, fx = .5, fy = .5){
 
 function renderStats(){
   const pl = state.posts.filter(p => p.status === "planned").length, hid = state.posts.filter(p => p.hidden).length;
+  const posted = state.posts.filter(p => p.status !== "planned" && !p.hidden).length;
   const ig = state.ig;
-  $("#stats").textContent = `${ig && ig.user ? "@" + ig.user + " · " : ""}${pl} geplant · ${state.posts.length - pl - hid} gepostet${syncLabel()}`;
+  $("#stats").textContent = `${ig && ig.user ? "@" + ig.user + " · " : ""}${pl} geplant · ${posted} gepostet${syncLabel()}`;
   const th = $("#toggleHidden");
   th.hidden = !hid; th.textContent = showHidden ? "Ausgeblendete verstecken" : `${hid} ausgeblendet · zeigen`;
   const dot = $("#igDot");
@@ -1150,12 +1151,29 @@ function igDialog(){
     const t = d => d ? new Date(d).toLocaleString("de-AT", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}) : "noch nie";
     back.innerHTML = `<div class="dialog wide"><b>Instagram</b>
       <p id="igInfo"></p><p class="err" id="igErr"></p>
+      <div id="igNew" style="display:grid;gap:8px"><b style="font-size:14px">Neuen Schlüssel einfügen</b>
+        <p>Deine Daten bleiben erhalten. Am besten einen Schlüssel ohne Ablaufdatum: Meta-App → „API setup with Unified login“ → Konfiguration mit Ablauf „Nie“ → „Token generieren“.</p>
+        <input id="igTok2" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Neuen Token einfügen" aria-label="Neuer Instagram-Token">
+        <input id="igId2" inputmode="numeric" autocomplete="off" placeholder="Instagram-Konto-ID (bei EAA-Schlüsseln)" aria-label="Instagram-Konto-ID">
+        <button class="btn primary" id="igSwap" type="button">Schlüssel ersetzen</button></div>
       <div class="actions" style="padding:0"><button class="btn primary" id="igSyncNow">Jetzt synchronisieren</button><button class="btn" id="igClose">Schließen</button></div>
       <button class="linkbtn" id="igOff" style="justify-self:start">Verbindung trennen</button></div>`;
     back.querySelector("#igInfo").textContent = `Verbunden als @${ig.user || "…"} · zuletzt aktualisiert: ${t(ig.lastSync)} · ${ig.exp ? `Schlüssel gültig bis ${new Date(ig.exp).toLocaleDateString("de-AT")} (verlängert sich automatisch, wenn du die App öffnest).` : "Schlüssel ohne Ablaufdatum."}`;
     back.querySelector("#igErr").textContent = ig.error || "";
+    const nw = back.querySelector("#igNew");
+    nw.hidden = !ig.error;
+    back.querySelector("#igId2").value = ig.igId || "";
+    back.querySelector("#igSwap").onclick = async () => {
+      const tok = back.querySelector("#igTok2").value.trim(), err = back.querySelector("#igErr");
+      if(tok.length < 20){ err.textContent = "Bitte den ganzen neuen Schlüssel einfügen."; return; }
+      const old = {...ig};
+      Object.assign(ig, {token: tok, igId: back.querySelector("#igId2").value.replace(/\D/g, ""), tokenAt: Date.now(), exp: tok.startsWith("EAA") ? 0 : Date.now() + 60 * DAY, base: null, who: null, error: ""});
+      const ok = await igSync(false);
+      if(ok){ save(); close(); toast("Instagram wieder verbunden"); }
+      else{ const msg = ig.error; Object.assign(ig, old); save(); renderStats(); err.textContent = msg || "Der Schlüssel funktioniert nicht."; }
+    };
     back.querySelector("#igClose").onclick = close;
-    back.querySelector("#igSyncNow").onclick = async () => { const ok = await igSync(false); if(ok) close(); else back.querySelector("#igErr").textContent = state.ig.error; };
+    back.querySelector("#igSyncNow").onclick = async () => { const ok = await igSync(false); if(ok) close(); else{ back.querySelector("#igErr").textContent = state.ig.error; back.querySelector("#igNew").hidden = false; } };
     back.querySelector("#igOff").onclick = e => {
       const b = e.currentTarget;
       if(!b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "Sicher? Nochmal tippen"; b.classList.add("warn"); return; }
@@ -1707,6 +1725,7 @@ async function pullImg(pid){
     return rec;
   }catch(e){ return null; }
 }
+let remoteIgPosts = 0;
 async function readRemote(ref){
   const path = "contents/state.json" + (ref ? "?ref=" + ref : "");
   const r = await gh(path);
@@ -1716,7 +1735,9 @@ async function readRemote(ref){
   if(!ref) syncSha = j.sha;
   let text = j.content ? b64ToText(j.content) : "";
   if(!text){ const raw = await gh(path, {raw: true}); text = await raw.text(); }
-  return JSON.parse(text);
+  const st = JSON.parse(text);
+  if(!ref) remoteIgPosts = (st.posts || []).filter(p => p.igId).length;
+  return st;
 }
 // Kurzbeschreibung eines Stands für Auswahl und Wiederherstellung
 function summary(st){
@@ -1799,6 +1820,13 @@ async function syncPush(){
     out.photos = Object.fromEntries(Object.entries(out.photos).filter(([, ph]) => ph.album === "_ig" || ph.synced));
     out.albums = state.albums.filter(a => Object.values(out.photos).some(ph => ph.album === a.id));
     delete out.board; delete out.current;
+    // Schutz: Sind in der Cloud viele Instagram-Posts, hier aber keine, lieber nichts hochladen
+    const igHere = out.posts.filter(p => p.igId).length;
+    if(remoteIgPosts >= 5 && igHere === 0 && state.ig){
+      syncState = "err"; pushing = false; renderStats();
+      toast("Sync pausiert: Instagram-Posts fehlen hier. Bitte Instagram neu verbinden.");
+      return;
+    }
     let r = await putFile("state.json", textToB64(JSON.stringify(out)), syncSha);
     if(r.status === 409 || r.status === 422){
       // Jemand war schneller: neu laden und entscheiden, wer jünger ist
@@ -1808,6 +1836,7 @@ async function syncPush(){
     }
     if(!r.ok) throw new Error("Upload fehlgeschlagen");
     const j = await r.json(); if(j.content && j.content.sha) syncSha = j.content.sha;
+    remoteIgPosts = igHere;
     save(true);
     syncState = "";
   }catch(e){ syncState = "err"; }
