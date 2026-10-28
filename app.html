@@ -395,10 +395,17 @@ function fmtDate(v){
   const d = new Date(v); if(isNaN(d)) return "geplant";
   return d.toLocaleDateString("de-AT", {weekday:"short", day:"2-digit", month:"2-digit"});
 }
+const checkedUrls = new Set();
 function bg(el, pid, fx = .5, fy = .5){
   el.style.backgroundPosition = `${fx*100}% ${fy*100}%`;
-  if(thumbs[pid]) el.style.backgroundImage = `url("${thumbs[pid]}")`;
-  else thumbURL(pid).then(u => { if(u) el.style.backgroundImage = `url("${u}")`; });
+  const set = u => {
+    if(!u){ if(state.photos[pid] && state.photos[pid].album === "_ig") igRepair(); return; }
+    el.style.backgroundImage = `url("${u}")`;
+    // Abgelaufene Instagram-Adressen erkennen und neu holen
+    if(u.startsWith("http") && !checkedUrls.has(u)){ checkedUrls.add(u); const t = new Image(); t.onerror = () => igRepair(); t.src = u; }
+  };
+  if(thumbs[pid]) set(thumbs[pid]);
+  else thumbURL(pid).then(set);
 }
 
 function renderStats(){
@@ -1079,6 +1086,7 @@ async function igSync(silent){
     }
     const r = mergeIg(items, !url);
     ig.lastSync = Date.now(); ig.error = "";
+    try{ localStorage.setItem("gs-ig-last", String(Date.now())); }catch(e){}
     save(!(r.added || r.matched)); renderGrid(); renderStrip();
     if(r.matched) toast(r.matched === 1 ? "Geplanter Post ist jetzt online ✓" : `${r.matched} geplante Posts sind online ✓`);
     else if(!silent) toast(r.added ? `${r.added} Posts von Instagram geladen` : "Alles aktuell");
@@ -1106,7 +1114,17 @@ async function igAuto(){
   const ig = state.ig;
   if(!ig || !ig.token) return;
   await igRefresh();
-  if(!ig.lastSync || Date.now() - ig.lastSync > 5 * 60e3) igSync(true);
+  // Pro Gerät merken, wann zuletzt geholt wurde: Bildadressen werden nicht synchronisiert und laufen ab
+  let last = 0;
+  try{ last = +localStorage.getItem("gs-ig-last") || 0; }catch(e){}
+  const missing = Object.values(state.photos).some(ph => ph.album === "_ig" && !ph.remote) || !state.posts.some(p => p.igId);
+  if(missing || Date.now() - last > 5 * 60e3) igSync(true);
+}
+// Instagram-Bild lädt nicht (Adresse abgelaufen oder fehlt): einmal pro Minute neu holen
+let igRepairAt = 0;
+function igRepair(){
+  if(!state.ig || !state.ig.token || Date.now() - igRepairAt < 60e3) return;
+  igRepairAt = Date.now(); igSync(true);
 }
 
 function igDialog(){
