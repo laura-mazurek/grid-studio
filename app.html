@@ -206,6 +206,7 @@ body.boardmode .seg{display:none}
 .viewer .nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.14);color:#fff;font-size:24px}
 .viewer .prev{left:12px}.viewer .next{right:12px}
 .viewer .vhint{font-size:12px;color:#888;text-align:center;padding:8px 14px calc(10px + env(safe-area-inset-bottom,0px))}
+.bph .cnt{position:absolute;left:4px;bottom:4px;background:rgba(18,17,22,.75);color:#fff;font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px}
 .bph .fav{position:absolute;right:4px;top:4px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(18,17,22,.45);color:#fff;font-size:13px;line-height:26px;padding:0}
 .bph .fav.on{background:#fff;color:#C2185B}
 .selbar{position:sticky;top:-16px;z-index:2;background:var(--bg);padding:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
@@ -1173,8 +1174,59 @@ function albumIds(aid){
   return out;
 }
 // Jede Reihe ist ein geplanter Post mit album = aktuelles Album. Pool = alle Fotos des Albums.
-let boardFilter = "all", boardSorts = [], boardZoom = "m";
-try{ boardZoom = localStorage.getItem("gs-zoom") || "m"; }catch(e){}
+let boardFilter = "all", boardSorts = [], boardZoom = "m", colorSort = false, bundleSimilar = false, analyzingNow = false;
+try{ boardZoom = localStorage.getItem("gs-zoom") || "m"; colorSort = localStorage.getItem("gs-color") === "1"; bundleSimilar = localStorage.getItem("gs-bundle") === "1"; }catch(e){}
+
+// Bildanalyse aus dem Vorschaubild: Durchschnittsfarbe (für Farbsortierung) und ein 64-Bit-Bildabdruck (für ähnliche Bilder)
+function analyze(pid){
+  return new Promise(res => {
+    const ph = state.photos[pid];
+    if(!ph || (ph.dh && ph.hsl)) return res();
+    thumbURL(pid).then(u => {
+      if(!u || u.startsWith("http")) return res();
+      const im = new Image();
+      im.onload = () => {
+        const c = document.createElement("canvas"); c.width = 9; c.height = 8;
+        const g = c.getContext("2d"); g.drawImage(im, 0, 0, 9, 8);
+        const d = g.getImageData(0, 0, 9, 8).data, gray = [];
+        let r = 0, gr = 0, b = 0;
+        for(let i = 0; i < 72; i++){ r += d[i * 4]; gr += d[i * 4 + 1]; b += d[i * 4 + 2]; gray.push(.3 * d[i * 4] + .59 * d[i * 4 + 1] + .11 * d[i * 4 + 2]); }
+        let hex = "";
+        for(let y = 0; y < 8; y++){
+          let byte = 0;
+          for(let x = 0; x < 8; x++) byte = (byte << 1) | (gray[y * 9 + x] > gray[y * 9 + x + 1] ? 1 : 0);
+          hex += byte.toString(16).padStart(2, "0");
+        }
+        r /= 72; gr /= 72; b /= 72;
+        const mx = Math.max(r, gr, b) / 255, mn = Math.min(r, gr, b) / 255, l = (mx + mn) / 2, dd = mx - mn;
+        let h = 0;
+        if(dd){ const R = r / 255, G = gr / 255, B = b / 255; h = mx === R ? ((G - B) / dd) % 6 : mx === G ? (B - R) / dd + 2 : (R - G) / dd + 4; h = (h * 60 + 360) % 360; }
+        ph.hsl = [Math.round(h), dd ? +(dd / (1 - Math.abs(2 * l - 1))).toFixed(3) : 0, +l.toFixed(3)];
+        ph.c = ph.c || `rgb(${Math.round(r)},${Math.round(gr)},${Math.round(b)})`;
+        ph.dh = hex; res();
+      };
+      im.onerror = () => res();
+      im.src = u;
+    });
+  });
+}
+async function ensureAnalyzed(ids){
+  const todo = ids.filter(id => state.photos[id] && !(state.photos[id].dh && state.photos[id].hsl));
+  for(let i = 0; i < todo.length; i += 8) await Promise.all(todo.slice(i, i + 8).map(analyze));
+  if(todo.length) save(true);
+  return todo.length > 0;
+}
+function hamming(a, b){
+  let n = 0;
+  for(let i = 0; i < 16; i += 4){ let x = parseInt(a.slice(i, i + 4), 16) ^ parseInt(b.slice(i, i + 4), 16); while(x){ n += x & 1; x >>= 1; } }
+  return n;
+}
+// Neutrale (wenig gesättigte) Bilder ans Ende, sonst nach Farbton und Helligkeit
+function colorKey(id){
+  const t = (state.photos[id] || {}).hsl;
+  if(!t) return [2, 0, 0];
+  return t[1] < .15 ? [1, -t[2], 0] : [0, Math.round(t[0] / 25), -t[2]];
+}
 const ZOOM = {s: [80, 64], m: [110, 86], l: [170, 120], xl: [260, 170]};
 const boardSel = new Set();
 function boardPosts(){ return state.posts.filter(p => p.status === "planned" && p.album && p.album === state.current); }
@@ -1352,6 +1404,11 @@ function renderBoard(){
     const b = document.createElement("button"); b.textContent = label; b.setAttribute("aria-pressed", boardFilter === k);
     b.onclick = () => { boardFilter = k; renderBoard(); }; fb.appendChild(b);
   });
+  [["Nach Farbe", () => colorSort, v => { colorSort = v; try{ localStorage.setItem("gs-color", v ? "1" : "0"); }catch(e){} }],
+   ["Ähnliche bündeln", () => bundleSimilar, v => { bundleSimilar = v; try{ localStorage.setItem("gs-bundle", v ? "1" : "0"); }catch(e){} }]].forEach(([label, get, set]) => {
+    const b = document.createElement("button"); b.textContent = (get() ? "✓ " : "") + label; b.setAttribute("aria-pressed", get());
+    b.onclick = () => { set(!get()); renderBoard(); }; fb.appendChild(b);
+  });
   const sb = c2.querySelector("#bSel");
   const shown = ids.filter(id => boardFilter === "all" || (boardFilter === "fav" ? state.photos[id].fav : !used.has(id)));
   sb.innerHTML = boardSel.size
@@ -1379,7 +1436,29 @@ function renderBoard(){
   const shown2 = ids.filter(id => boardFilter === "all" || (boardFilter === "fav" ? state.photos[id].fav : !used.has(id)));
   if(!state.current) pool.innerHTML = `<p class="bhint">Lade ein Album mit „＋ Album laden“, z. B. alle Bilder einer Hochzeit.</p>`;
   else if(!shown2.length) pool.innerHTML = `<p class="bhint">Keine Bilder für diesen Filter.</p>`;
-  shown2.forEach(id => {
+  // Gruppen bilden: aufeinanderfolgende, sehr ähnliche Bilder (Serien) zusammenfassen; optional nach Farbe sortieren
+  const smart = colorSort || bundleSimilar;
+  if(smart && shown2.some(id => !(state.photos[id].dh && state.photos[id].hsl))){
+    pool.insertAdjacentHTML("beforebegin", `<p class="bhint" id="anaHint">Bilder werden analysiert …</p>`);
+    if(!analyzingNow){ analyzingNow = true; ensureAnalyzed(shown2).then(ch => { analyzingNow = false; if(ch && state.board) renderBoard(); }); }
+  }
+  let groups = shown2.map(id => [id]);
+  if(bundleSimilar){
+    groups = [];
+    shown2.forEach(id => {
+      const last = groups[groups.length - 1], prev = last && last[last.length - 1];
+      const a = state.photos[id].dh, b2 = prev && state.photos[prev].dh;
+      if(last && a && b2 && hamming(a, b2) <= 12) last.push(id); else groups.push([id]);
+    });
+  }
+  const rep0 = g => g.find(id => state.photos[id].fav) || g[0];
+  if(colorSort){
+    const cmp = (x, y) => { const a = colorKey(rep0(x)), b = colorKey(rep0(y)); return a[0] - b[0] || a[1] - b[1] || a[2] - b[2]; };
+    groups = groups.map((g, i) => [g, i]).sort((x, y) => cmp(x[0], y[0]) || x[1] - y[1]).map(x => x[0]);
+  }
+  const ordered = groups.flat();
+  groups.forEach(g => {
+    const id = rep0(g);
     const d = document.createElement("div");
     const selIdx = [...boardSel].indexOf(id);
     d.className = "bph" + (used.has(id) ? " used" : "") + (selIdx >= 0 ? " sel" : "");
@@ -1387,10 +1466,11 @@ function renderBoard(){
     d.innerHTML = `<button class="pick" aria-label="Auswählen">${selIdx >= 0 ? selIdx + 1 : ""}</button><button class="fav${state.photos[id].fav ? " on" : ""}" aria-label="Favorit">♥</button>`;
     d.querySelector(".fav").onclick = e => { e.stopPropagation(); state.photos[id].fav = !state.photos[id].fav; save(); renderBoard(); };
     d.querySelector(".pick").onclick = e => { e.stopPropagation(); boardSel.has(id) ? boardSel.delete(id) : boardSel.add(id); renderBoard(); };
-    d.onclick = () => photoViewer(shown2, shown2.indexOf(id));
+    if(g.length > 1){ d.insertAdjacentHTML("beforeend", `<span class="cnt">×${g.length} ähnliche</span>`); d.onclick = () => photoViewer(g, g.indexOf(id)); }
+    else d.onclick = () => photoViewer(ordered, ordered.indexOf(id));
     pool.appendChild(d);
   });
-  boardSorts.push(Sortable.create(pool, {...touch, group: {name: "board", pull: "clone", put: true}, sort: true, animation: 150,
+  boardSorts.push(Sortable.create(pool, {...touch, group: {name: "board", pull: "clone", put: true}, sort: !smart, animation: 150,
     onUpdate(e){
       // Reihenfolge der sichtbaren Fotos ändern, ausgefilterte behalten ihren Platz
       const vis = [...shown2], [m] = vis.splice(e.oldIndex, 1); vis.splice(e.newIndex, 0, m);
