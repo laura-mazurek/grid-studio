@@ -240,7 +240,7 @@ body.boardmode .seg{display:none}
     <div class="feedfoot">
       <button class="addposted" id="addPosted">＋ Gepostete Bilder von Hand</button>
       <button class="addposted" id="toggleHidden" hidden></button>
-      <button class="addposted" id="transferBtn">⇄ Auf anderes Gerät übertragen</button>
+      <button class="addposted" id="transferBtn">☁︎ Geräte synchronisieren</button>
     </div>
   </div>
 
@@ -306,7 +306,8 @@ const getImg = id => idb("img", "readonly", s => s.get(id));
 const delImg = id => idb("img", "readwrite", s => s.delete(id));
 const allImgKeys = () => idb("img", "readonly", s => s.getAllKeys());
 let saveTimer;
-function save(){ clearTimeout(saveTimer); saveTimer = setTimeout(() => idb("kv", "readwrite", s => s.put(JSON.stringify(state), "state")), 80); }
+// fromRemote/quiet: nur lokal speichern, ohne die Änderung als „neuer Stand“ zu markieren
+function save(quiet){ if(!quiet){ state.updatedAt = Date.now(); schedulePush(); } clearTimeout(saveTimer); saveTimer = setTimeout(() => idb("kv", "readwrite", s => s.put(JSON.stringify(state), "state")), 80); }
 // Beim Schließen oder Wechseln der App sofort speichern, statt auf den Timer zu warten
 function flush(){ if(saveTimer){ clearTimeout(saveTimer); saveTimer = null; idb("kv", "readwrite", s => s.put(JSON.stringify(state), "state")); } }
 addEventListener("pagehide", flush);
@@ -321,14 +322,16 @@ const fullURLs = {};        // pid -> objectURL (nur bei Bedarf)
 
 async function thumbURL(pid){
   if(thumbs[pid]) return thumbs[pid];
-  const rec = await getImg(pid);
+  let rec = await getImg(pid);
+  if(!rec && state.photos[pid] && state.photos[pid].synced) rec = await pullImg(pid);
   if(rec && rec.thumb) thumbs[pid] = URL.createObjectURL(rec.thumb);
   else if(state.photos[pid] && state.photos[pid].remote) return state.photos[pid].remote;
   return thumbs[pid];
 }
 async function fullURL(pid){
   if(fullURLs[pid]) return fullURLs[pid];
-  const rec = await getImg(pid);
+  let rec = await getImg(pid);
+  if(!rec && state.photos[pid] && state.photos[pid].synced) rec = await pullImg(pid);
   if(rec && rec.full) fullURLs[pid] = URL.createObjectURL(rec.full);
   return fullURLs[pid] || thumbs[pid];
 }
@@ -359,7 +362,7 @@ async function ingest(files, album, onProgress){
       const [full, thumb] = await Promise.all([scaled(im, 2160, .9), scaled(im, 480, .8)]);
       URL.revokeObjectURL(url);
       const id = uid();
-      await putImg(id, {full, thumb});
+      await putImg(id, {full, thumb}); localKeys.add(id);
       thumbs[id] = URL.createObjectURL(thumb);
       state.photos[id] = {album, w: im.naturalWidth, h: im.naturalHeight};
       ids.push(id);
@@ -385,7 +388,7 @@ function bg(el, pid, fx = .5, fy = .5){
 function renderStats(){
   const pl = state.posts.filter(p => p.status === "planned").length, hid = state.posts.filter(p => p.hidden).length;
   const ig = state.ig;
-  $("#stats").textContent = `${ig && ig.user ? "@" + ig.user + " · " : ""}${pl} geplant · ${state.posts.length - pl - hid} gepostet`;
+  $("#stats").textContent = `${ig && ig.user ? "@" + ig.user + " · " : ""}${pl} geplant · ${state.posts.length - pl - hid} gepostet${syncLabel()}`;
   const th = $("#toggleHidden");
   th.hidden = !hid; th.textContent = showHidden ? "Ausgeblendete verstecken" : `${hid} ausgeblendet · zeigen`;
   const dot = $("#igDot");
@@ -400,8 +403,8 @@ function layout(id){ return state.layouts.find(l => l.id === id); }
 function ensureLayouts(){
   if(!Array.isArray(state.layouts)) state.layouts = [];
   if(!layout("ig")) state.layouts.unshift({id: "ig", name: "Instagram", order: state.posts.map(p => p.id)});
-  if(state.layouts.length < 2) state.layouts.push({id: uid(), name: "Version 1", order: state.posts.map(p => p.id)});
-  if(state.view !== "new" && !layout(state.view)) state.view = state.layouts[1].id;
+  if(!state.layoutsInit){ state.layoutsInit = true; if(state.layouts.length < 2) state.layouts.push({id: uid(), name: "Version 1", order: state.posts.map(p => p.id)}); }
+  if(state.view !== "new" && !layout(state.view)) state.view = state.layouts[1] ? state.layouts[1].id : "ig";
 }
 function orderOf(l){
   const map = new Map(state.posts.map(p => [p.id, p])), seen = new Set(), out = [];
@@ -456,9 +459,10 @@ function renderViews(){
   const add = document.createElement("button");
   add.className = "add"; add.textContent = "＋ Version";
   add.onclick = () => {
-    const l = {id: uid(), name: "Version " + state.layouts.length, order: viewPosts().map(p => p.id)};
+    const l = {id: uid(), name: "Version " + state.layouts.length, order: []};
+    resetToInstagram(l);
     state.layouts.push(l); state.view = l.id; save(); renderViews(); renderGrid();
-    toast(`„${l.name}“ angelegt, Kopie der bisherigen Ansicht`);
+    toast(`„${l.name}“ angelegt: Instagram-Reihenfolge, geplante oben`);
   };
   box.appendChild(add);
   const ex = document.createElement("button");
@@ -477,6 +481,7 @@ function viewDialog(l){
       <p>Hier liegt dein Profil so, wie es in Instagram wirklich aussieht. Instagram gibt die umsortierte Reihenfolge nicht heraus, deshalb schiebst du sie hier einmal zurecht. Neue Posts kommen beim Sync automatisch oben dazu.</p>
       <div class="stackbtns"><button class="btn primary" id="vCopy">Als neue Version kopieren<small>Startet mit genau dieser Reihenfolge</small></button>
       ${state.layouts.filter(x => x.id !== "ig").map(x => `<button class="btn" data-into="${x.id}">In „${x.name.replace(/[<>&"]/g, "")}“ kopieren<small>Überschreibt die Reihenfolge dieser Version</small></button>`).join("")}
+      <button class="btn warn" id="vDelAll">Alle Versionen löschen<small>Nur die Versionen. Instagram-Ansicht und geplante Posts bleiben.</small></button>
       <button class="btn" id="vDate">Nach Datum ordnen<small>Gepostete Bilder neu nach Datum, geplante bleiben oben</small></button>
       <button class="btn" id="vClose">Schließen</button></div></div>`;
     back.querySelector("#vCopy").onclick = () => {
@@ -488,6 +493,13 @@ function viewDialog(l){
       if(!b.dataset.armed){ b.dataset.armed = "1"; b.firstChild.textContent = "Sicher? Nochmal tippen"; return; }
       t.order = orderOf(l).map(p => p.id); state.view = t.id; save(); renderViews(); renderGrid(); close(); toast(`In „${t.name}“ kopiert`);
     });
+    const da = back.querySelector("#vDelAll");
+    if(state.layouts.length < 2) da.hidden = true;
+    da.onclick = () => {
+      if(!da.dataset.armed){ da.dataset.armed = "1"; da.firstChild.textContent = "Sicher? Nochmal tippen"; return; }
+      state.layouts = state.layouts.filter(x => x.id === "ig"); state.view = "ig";
+      save(); renderViews(); renderGrid(); close(); toast("Alle Versionen gelöscht");
+    };
     back.querySelector("#vDate").onclick = () => {
       const planned = orderOf(l).filter(p => p.status === "planned");
       l.order = [...planned, ...state.posts.filter(p => p.status !== "planned").sort(byDate)].map(p => p.id);
@@ -511,10 +523,9 @@ function viewDialog(l){
       state.layouts.push(c); state.view = c.id; save(); renderViews(); renderGrid(); close(); toast(`„${c.name}“ angelegt`);
     };
     const del = back.querySelector("#vDel");
-    if(state.layouts.length <= 2) del.hidden = true;
     del.onclick = () => {
       if(!del.dataset.armed){ del.dataset.armed = "1"; del.textContent = "Sicher? Nochmal tippen"; return; }
-      state.layouts = state.layouts.filter(x => x !== l); state.view = state.layouts[1].id;
+      state.layouts = state.layouts.filter(x => x !== l); state.view = state.layouts[1] ? state.layouts[1].id : "ig";
       save(); renderViews(); renderGrid(); close(); toast("Version gelöscht");
     };
   }
@@ -1036,7 +1047,7 @@ async function igSync(silent){
     }
     const r = mergeIg(items, !url);
     ig.lastSync = Date.now(); ig.error = "";
-    save(); renderGrid(); renderStrip();
+    save(!(r.added || r.matched)); renderGrid(); renderStrip();
     if(r.matched) toast(r.matched === 1 ? "Geplanter Post ist jetzt online ✓" : `${r.matched} geplante Posts sind online ✓`);
     else if(!silent) toast(r.added ? `${r.added} Posts von Instagram geladen` : "Alles aktuell");
     return true;
@@ -1137,7 +1148,7 @@ function avgColor(pid, el){
       const c = document.createElement("canvas"); c.width = c.height = 1;
       const g = c.getContext("2d"); g.drawImage(im, 0, 0, 1, 1);
       const d = g.getImageData(0, 0, 1, 1).data;
-      ph.c = `rgb(${d[0]},${d[1]},${d[2]})`; el.style.background = ph.c; save();
+      ph.c = `rgb(${d[0]},${d[1]},${d[2]})`; el.style.background = ph.c; save(true);
     };
     im.src = u;
   });
@@ -1342,6 +1353,125 @@ function igPreview(p){
   show(); app.appendChild(ov);
 }
 
+/* ---------- Geräte-Sync über ein privates GitHub-Repo ---------- */
+// Dort liegen state.json (Posts, Versionen, Instagram) und die Bilder der Posts unter img/.
+// Unbenutzte Album-Fotos bleiben lokal. Es gewinnt der jüngere Stand (updatedAt).
+let syncCfg = null, syncSha = null, syncReady = false, pushTimer = null, pushing = false, syncState = "";
+const localKeys = new Set();
+function syncLabel(){ return !syncCfg ? "" : syncState === "err" ? " · ☁︎ Sync-Fehler" : syncState === "busy" ? " · ☁︎ …" : " · ☁︎ synchron"; }
+async function gh(path, opts = {}){
+  return fetch(`https://api.github.com/repos/${syncCfg.repo}/${path}`, {
+    method: opts.method || "GET", cache: "no-store", body: opts.body,
+    headers: {Authorization: `Bearer ${syncCfg.token}`, Accept: opts.raw ? "application/vnd.github.raw" : "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+  });
+}
+const b64ToText = b => new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\n/g, "")), c => c.charCodeAt(0)));
+function textToB64(t){
+  const bytes = new TextEncoder().encode(t); let bin = "";
+  for(let i = 0; i < bytes.length; i += 32768) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 32768));
+  return btoa(bin);
+}
+const blobToB64 = b => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(String(fr.result).split(",")[1]); fr.readAsDataURL(b); });
+async function putFile(path, b64, sha){
+  return gh(`contents/${path}`, {method: "PUT", body: JSON.stringify({message: "Grid Studio Sync", content: b64, ...(sha ? {sha} : {})})});
+}
+async function pullImg(pid){
+  if(!syncCfg) return null;
+  try{
+    const get = async k => { const r = await gh(`contents/img/${pid}.${k}.jpg`, {raw: true}); return r.ok ? new Blob([await r.arrayBuffer()], {type: "image/jpeg"}) : null; };
+    const [thumb, full] = await Promise.all([get("t"), get("f")]);
+    if(!thumb && !full) return null;
+    const rec = {thumb: thumb || full, full: full || thumb};
+    await putImg(pid, rec); localKeys.add(pid);
+    return rec;
+  }catch(e){ return null; }
+}
+async function readRemote(){
+  const r = await gh("contents/state.json");
+  if(r.status === 404) return null;
+  if(!r.ok) throw new Error("GitHub antwortet " + r.status);
+  const j = await r.json();
+  syncSha = j.sha;
+  let text = j.content ? b64ToText(j.content) : "";
+  if(!text){ const raw = await gh("contents/state.json", {raw: true}); text = await raw.text(); }
+  return JSON.parse(text);
+}
+// Entfernten Stand übernehmen, eigene nur-lokale Alben und Geräte-Einstellungen behalten
+function applyRemote(rs){
+  const keep = {};
+  for(const id of Object.keys(state.photos)){
+    const ph = state.photos[id];
+    if(!rs.photos[id] && !ph.remote && localKeys.has(id)) keep[id] = ph;
+  }
+  const albums = [...rs.albums];
+  state.albums.forEach(a => { if(!albums.some(x => x.id === a.id) && Object.values(keep).some(ph => ph.album === a.id)) albums.push(a); });
+  const local = {current: state.current, board: state.board, view: state.view};
+  state = Object.assign({}, rs, {photos: Object.assign({}, rs.photos, keep), albums});
+  state.current = albums.some(a => a.id === local.current) ? local.current : (albums[0] ? albums[0].id : null);
+  state.board = local.board;
+  state.view = local.view === "new" || (state.layouts || []).some(l => l.id === local.view) ? local.view : state.view;
+  ensureLayouts();
+  save(true);
+  renderAlbums(); renderViews(); renderGrid(); renderStrip();
+  if(openPost && !postById(openPost.id)) closeSheet();
+}
+async function syncPull(){
+  if(!syncCfg) return;
+  try{
+    syncState = "busy"; renderStats();
+    const rs = await readRemote();
+    syncReady = true;
+    if(rs && (rs.updatedAt || 0) > (state.updatedAt || 0)) applyRemote(rs);
+    else if(!rs || (rs.updatedAt || 0) < (state.updatedAt || 0)) schedulePush(true);
+    syncState = "";
+  }catch(e){ syncState = "err"; }
+  syncReady = true; renderStats();
+}
+function schedulePush(now){
+  if(!syncCfg || !syncReady) return;
+  clearTimeout(pushTimer); pushTimer = setTimeout(syncPush, now ? 50 : 2500);
+}
+async function syncPush(){
+  if(!syncCfg || pushing) return;
+  pushing = true; syncState = "busy"; renderStats();
+  try{
+    // Erst fehlende Bilder der Posts hochladen
+    const need = new Set();
+    state.posts.forEach(p => p.slides.forEach(sl => { const ph = state.photos[sl.pid]; if(ph && !ph.remote && !ph.synced) need.add(sl.pid); }));
+    for(const pid of need){
+      const rec = await getImg(pid);
+      if(!rec) continue;
+      const okT = await putFile(`img/${pid}.t.jpg`, await blobToB64(rec.thumb || rec.full));
+      const okF = await putFile(`img/${pid}.f.jpg`, await blobToB64(rec.full || rec.thumb));
+      if((okT.ok || okT.status === 422) && (okF.ok || okF.status === 422)) state.photos[pid].synced = true;
+    }
+    // Nur Fotos mitschicken, die auch woanders verfügbar sind
+    const out = JSON.parse(JSON.stringify(state));
+    out.photos = Object.fromEntries(Object.entries(state.photos).filter(([, ph]) => ph.remote || ph.synced));
+    out.albums = state.albums.filter(a => Object.values(out.photos).some(ph => ph.album === a.id));
+    delete out.board; delete out.current;
+    let r = await putFile("state.json", textToB64(JSON.stringify(out)), syncSha);
+    if(r.status === 409 || r.status === 422){
+      // Jemand war schneller: neu laden und entscheiden, wer jünger ist
+      const rs = await readRemote();
+      if(rs && (rs.updatedAt || 0) > (state.updatedAt || 0)){ applyRemote(rs); r = {ok: true, json: async () => ({content: {sha: syncSha}})}; }
+      else r = await putFile("state.json", textToB64(JSON.stringify(out)), syncSha);
+    }
+    if(!r.ok) throw new Error("Upload fehlgeschlagen");
+    const j = await r.json(); if(j.content && j.content.sha) syncSha = j.content.sha;
+    save(true);
+    syncState = "";
+  }catch(e){ syncState = "err"; }
+  pushing = false; renderStats();
+}
+async function syncConnect(token, repo){
+  syncCfg = {token, repo};
+  const r = await gh("");
+  if(r.status === 404 || r.status === 401 || r.status === 403){ syncCfg = null; throw new Error(r.status === 404 ? "Repo nicht gefunden oder der Token darf nicht darauf zugreifen." : "Der Token wird nicht akzeptiert."); }
+  await idb("kv", "readwrite", s => s.put(JSON.stringify(syncCfg), "sync"));
+  syncReady = false; await syncPull();
+}
+
 /* ---------- Übertragen & Sichern ---------- */
 // Dateiformat: Kennung, Länge des Kopfs, Kopf (JSON mit Zustand und Bildverzeichnis), danach die Bilder als Rohdaten.
 const MAGIC = "GRIDSTUDIO1\n";
@@ -1363,7 +1493,7 @@ async function exportBackup(withAll){
   }
   const st = JSON.parse(JSON.stringify(state));
   st.photos = Object.fromEntries(keep.map(id => [id, state.photos[id]]));
-  const head = JSON.stringify({state: st, index});
+  const head = JSON.stringify({state: st, index, sync: syncCfg && {token: syncCfg.token, repo: syncCfg.repo}});
   const headBytes = new TextEncoder().encode(head);
   const blob = new Blob([MAGIC, String(headBytes.length).padStart(12, "0"), headBytes, ...parts], {type: "application/octet-stream"});
   const file = new File([blob], `Grid Studio ${new Date().toISOString().slice(0, 10)}.gridstudio`, {type: "application/octet-stream"});
@@ -1381,7 +1511,7 @@ async function importBackup(file){
     if(magic !== MAGIC) throw new Error("Das ist keine Grid-Studio-Datei.");
     const len = parseInt(await file.slice(MAGIC.length, MAGIC.length + 12).text(), 10);
     const start = MAGIC.length + 12;
-    const {state: st, index} = JSON.parse(await file.slice(start, start + len).text());
+    const {state: st, index, sync: sc} = JSON.parse(await file.slice(start, start + len).text());
     const base = start + len;
     toast("Wird übernommen …");
     for(const id of Object.keys(index)){
@@ -1393,6 +1523,7 @@ async function importBackup(file){
       await putImg(id, rec);
     }
     await idb("kv", "readwrite", s => s.put(JSON.stringify(st), "state"));
+    if(sc && sc.token) await idb("kv", "readwrite", s => s.put(JSON.stringify(sc), "sync"));
     location.reload();
   }catch(e){ toast(e.message || "Datei konnte nicht gelesen werden"); }
 }
@@ -1400,7 +1531,23 @@ function transferDialog(){
   const back = document.createElement("div"); back.className = "dialog-back";
   const close = () => back.remove();
   back.addEventListener("click", e => { if(e.target === back) close(); });
-  back.innerHTML = `<div class="dialog wide"><b>Auf anderes Gerät übertragen</b>
+  const host = location.hostname.endsWith(".github.io") ? location.hostname.split(".")[0] : "";
+  const syncHtml = syncCfg
+    ? `<b>Geräte-Sync ist an</b><p>Verbunden mit <b>${syncCfg.repo.replace(/[<>&"]/g, "")}</b>. Änderungen landen nach ein paar Sekunden auf allen Geräten, auf denen Grid Studio verbunden ist.${syncState === "err" ? " <span class='err'>Letzter Sync ist fehlgeschlagen.</span>" : ""}</p>
+       <div class="stackbtns"><button class="btn primary" id="sNow">Jetzt synchronisieren</button><button class="btn warn" id="sOff">Sync auf diesem Gerät ausschalten</button></div><hr style="border:0;border-top:1px solid var(--line);width:100%">`
+    : `<b>Geräte immer synchron halten</b>
+       <p>Einmal pro Gerät einrichten (ca. 3 Minuten). Dein Stand liegt dann in einem privaten Repo in deinem GitHub-Konto, kein Abo.</p>
+       <ol class="steps">
+         <li><a href="https://github.com/new?name=grid-studio-data&visibility=private" target="_blank" rel="noopener">Privates Repo anlegen ↗</a><br>Name <b>grid-studio-data</b>, <b>Private</b>, „Add README“ an → Create.</li>
+         <li><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Zugangsschlüssel erstellen ↗</a><br>Name „Grid Studio“, Ablauf <b>No expiration</b> (oder 1 Jahr). Bei „Repository access“ <b>Only select repositories → grid-studio-data</b>. Bei „Permissions“ → <b>Contents: Read and write</b>. Dann „Generate token“ und kopieren.</li>
+         <li>Hier einfügen:</li>
+       </ol>
+       <input id="sTok" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_…" aria-label="GitHub-Token">
+       <input id="sRepo" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Repo" value="${host ? host + "/grid-studio-data" : ""}" placeholder="dein-name/grid-studio-data">
+       <p class="err" id="sErr"></p>
+       <div class="stackbtns"><button class="btn primary" id="sGo">Sync einschalten</button></div>
+       <p>Auf dem zweiten Gerät dasselbe einfügen. Oder unten eine Datei erstellen und dort übernehmen, dann kommt der Zugang mit.</p><hr style="border:0;border-top:1px solid var(--line);width:100%">`;
+  back.innerHTML = `<div class="dialog wide">${syncHtml}<b>Per Datei übertragen oder sichern</b>
     <p>Grid Studio speichert alles nur auf dem Gerät, auf dem du es benutzt. So kommt dein Stand aufs andere Gerät: hier eine Datei erstellen, per AirDrop schicken, dort öffnen und übernehmen. Die Instagram-Verbindung kommt mit.</p>
     <div class="stackbtns">
       <button class="btn primary" id="tPlan">Datei erstellen: Planung<small>Versionen, Karussells, Instagram, Favoriten. Ohne unbenutzte Album-Fotos, daher klein.</small></button>
@@ -1408,6 +1555,22 @@ function transferDialog(){
       <button class="btn" id="tIn">Datei übernehmen<small>Ersetzt alles auf diesem Gerät durch den Stand aus der Datei.</small></button>
       <button class="btn" id="tClose">Schließen</button>
     </div></div>`;
+  const sNow = back.querySelector("#sNow");
+  if(sNow) sNow.onclick = async () => { close(); await syncPull(); await syncPush(); toast(syncState === "err" ? "Sync fehlgeschlagen" : "Synchronisiert"); };
+  const sOff = back.querySelector("#sOff");
+  if(sOff) sOff.onclick = async () => {
+    if(!sOff.dataset.armed){ sOff.dataset.armed = "1"; sOff.textContent = "Sicher? Nochmal tippen"; return; }
+    syncCfg = null; await idb("kv", "readwrite", s => s.delete("sync")); renderStats(); close(); toast("Sync ausgeschaltet");
+  };
+  const sGo = back.querySelector("#sGo");
+  if(sGo) sGo.onclick = async () => {
+    const tok = back.querySelector("#sTok").value.trim(), repo = back.querySelector("#sRepo").value.trim().replace(/^https:\/\/github\.com\//, "").replace(/\/$/, "");
+    const err = back.querySelector("#sErr");
+    if(tok.length < 20 || !/^[\w.-]+\/[\w.-]+$/.test(repo)){ err.textContent = "Bitte Token und Repo (name/grid-studio-data) eintragen."; return; }
+    sGo.disabled = true; sGo.textContent = "Verbinde …"; err.textContent = "";
+    try{ await syncConnect(tok, repo); close(); toast("Sync ist an"); }
+    catch(e){ err.textContent = e.message; sGo.disabled = false; sGo.textContent = "Sync einschalten"; }
+  };
   back.querySelector("#tPlan").onclick = () => { close(); exportBackup(false); };
   back.querySelector("#tAll").onclick = () => { close(); exportBackup(true); };
   back.querySelector("#tIn").onclick = e => {
@@ -1431,7 +1594,7 @@ $("#fileBackup").addEventListener("change", e => { const f = e.target.files[0]; 
   // Aufräumen: Posts ohne vorhandene Bilder entfernen
   const keys = new Set(await allImgKeys() || []);
   if(db){
-    for(const id of Object.keys(state.photos)) if(!keys.has(id) && !state.photos[id].remote) delete state.photos[id];
+    for(const id of Object.keys(state.photos)) if(!keys.has(id) && !state.photos[id].remote && !state.photos[id].synced) delete state.photos[id];
     state.posts.forEach(p => p.slides = p.slides.filter(s => state.photos[s.pid]));
     state.posts = state.posts.filter(p => p.slides.length);
   }
@@ -1440,8 +1603,16 @@ $("#fileBackup").addEventListener("change", e => { const f = e.target.files[0]; 
   ensureLayouts();
   renderAlbums(); renderStrip(); setupSortable(); renderViews(); renderGrid();
   if(state.board) setBoard(true);
-  igAuto();
-  document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") igAuto(); });
+  (await allImgKeys() || []).forEach(k => localKeys.add(k));
+  try{ const sc = await idb("kv", "readonly", s => s.get("sync")); if(sc) syncCfg = JSON.parse(sc); }catch(e){}
+  // Reihenfolge wichtig: zuerst den neuesten Stand holen, dann erst Instagram prüfen (das speichert)
+  const refresh = async () => { await syncPull(); igAuto(); };
+  refresh();
+  document.addEventListener("visibilitychange", () => {
+    if(document.visibilityState === "visible") refresh();
+    else if(pushTimer){ clearTimeout(pushTimer); syncPush(); }
+  });
+  setInterval(() => { if(document.visibilityState === "visible" && syncCfg && !pushing) syncPull(); }, 45e3);
 })();
 })();
 </script>

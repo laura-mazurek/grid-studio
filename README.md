@@ -36,6 +36,8 @@ Der Schlüssel wird nur im Browser auf deinem Gerät gespeichert.
 Oben auf **Board**: breite Arbeitsansicht. Links die Karussells (jede Reihe = ein geplanter Post), in der Mitte alle Bilder des Albums
 (antippen = auswählen, ♥ = Favorit, ziehen = in ein Karussell), rechts die Grid-Vorschau. „Vorschau“ zeigt das Karussell wie in Instagram.
 
-## Übertragen
+## Geräte-Sync
 
-Unter dem Grid: **⇄ Auf anderes Gerät übertragen** → Datei erstellen → per AirDrop schicken → auf dem anderen Gerät „Datei übernehmen“.
+Unter dem Grid: **☁︎ Geräte synchronisieren**. Einmal pro Gerät ein privates Repo (`grid-studio-data`) und einen Fine-grained Token
+mit „Contents: Read and write“ nur für dieses Repo eintragen. Synchronisiert werden Posts, Versionen, Instagram-Verbindung und die Bilder
+der Posts; unbenutzte Album-Fotos bleiben lokal. Alternativ per Datei übertragen (AirDrop).
