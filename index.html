@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="gs-build" content="20261106192522">
+<meta name="gs-build" content="20261106214949">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
 <title>Grid Studio</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -139,6 +139,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .dialog .stackbtns{display:grid;gap:6px}
 .dialog a.btn{text-align:center;text-decoration:none;color:var(--ink)}
 .tile.hidden{opacity:.35}
+.tile.panning,.mgrid div.panning{cursor:move;outline:2px solid var(--accent);outline-offset:-2px;z-index:2}
 .tile.swapsel::before,.mgrid div.swapsel::before{content:"";position:absolute;inset:0;border:4px solid var(--accent);z-index:3;pointer-events:none}
 .swapbar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--tray-h,150px) + 12px);z-index:6;display:flex;align-items:center;gap:8px;background:var(--ink);color:var(--bg);border-radius:999px;padding:6px 6px 6px 14px;font-size:13px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.3);white-space:nowrap}
 .swapbar button{border:0;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700;background:var(--bg);color:var(--ink)}
@@ -518,7 +519,7 @@ function renderViews(){
   });
   const sw = document.createElement("button");
   sw.className = "swap"; sw.textContent = "⇄ Tauschen"; sw.setAttribute("aria-pressed", swapMode);
-  sw.title = "Zwei Kacheln antippen und ihre Plätze tauschen";
+  sw.title = "Zwei Kacheln antippen und ihre Plätze tauschen. Schneller am Laptop: ⌘ gedrückt halten und zwei Kacheln anklicken. ⌥ + Ziehen verschiebt den Ausschnitt.";
   sw.onclick = () => { setSwapMode(!swapMode); };
   box.appendChild(sw);
   const add = document.createElement("button");
@@ -716,6 +717,40 @@ function doSwap(){
   swapSel = []; save(); renderGrid();
   $("#swapTxt").textContent = "Getauscht ✓ · nächste zwei antippen"; $("#swapGo").disabled = true;
 }
+// ⌘ (Mac) bzw. Strg + Klick: erste Kachel merken, zweite = sofort tauschen
+const quickKey = e => e.metaKey || e.ctrlKey;
+function quickSwap(sel, id, l, after){
+  if(sel.includes(id)){ sel.splice(sel.indexOf(id), 1); after(); return; }
+  sel.push(id);
+  if(sel.length < 2){ after(); return; }
+  const [a, b] = sel.splice(0);
+  if(postById(a).pinned || postById(b).pinned) toast("Fixierte Posts bleiben immer oben"); else toast("Getauscht");
+  swapIn(l, a, b); save(); after();
+}
+// ⌥ (Alt) + Ziehen auf einer Kachel: Ausschnitt verschieben, wie im Vorschaubild
+let panJust = 0;
+function tilePan(el, p, after){
+  el.addEventListener("pointerdown", e => {
+    if(!e.altKey || !p.slides[0]) return;
+    e.preventDefault(); e.stopPropagation();
+    const s = p.slides[0], ph = state.photos[s.pid] || {w: 1080, h: 1350}, r = el.getBoundingClientRect();
+    const scale = Math.max(r.width / ph.w, r.height / ph.h);
+    const st = {x: e.clientX, y: e.clientY, fx: s.fx, fy: s.fy, ox: ph.w*scale - r.width, oy: ph.h*scale - r.height, moved: false};
+    el.setPointerCapture(e.pointerId); el.classList.add("panning");
+    const move = ev => {
+      st.moved = true;
+      if(st.ox > 1) s.fx = Math.min(1, Math.max(0, st.fx - (ev.clientX - st.x) / st.ox));
+      if(st.oy > 1) s.fy = Math.min(1, Math.max(0, st.fy - (ev.clientY - st.y) / st.oy));
+      el.style.backgroundPosition = `${s.fx*100}% ${s.fy*100}%`;
+    };
+    const up = () => {
+      el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); el.removeEventListener("pointercancel", up);
+      el.classList.remove("panning"); panJust = Date.now();
+      if(st.moved){ save(); after(); }
+    };
+    el.addEventListener("pointermove", move); el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+  });
+}
 
 // Zum Ordner des Fotos springen: in der Grid-Ansicht die Leiste, im Board die Galerie
 function folderOf(p){
@@ -745,6 +780,18 @@ function openInBoard(p){
   });
 }
 
+// Sonderklicks im Grid: ⌥-Ziehen gerade beendet, ⌘-Tauschen oder Tauschen-Modus
+function gridClick(e, p){
+  if(e.altKey || Date.now() - panJust < 300) return true;
+  if(quickKey(e)){
+    if(state.view === "new"){ toast("In „Neueste zuerst“ geht Tauschen nicht. Bitte eine Version wählen."); return true; }
+    if(swapMode){ swapPick(p.id); if(swapSel.length === 2) doSwap(); return true; }
+    quickSwap(swapSel, p.id, layout(state.view), renderGrid); return true;
+  }
+  if(swapMode){ swapPick(p.id); return true; }
+  if(swapSel.length){ swapSel = []; renderGrid(); }
+  return false;
+}
 function renderGrid(){
   if(state.board) renderBoard();
   const feed = $("#feed"), top = feed.scrollTop;
@@ -770,8 +817,9 @@ function renderGrid(){
         const n = planned.length - planned.indexOf(p);
         t.insertAdjacentHTML("beforeend", `<span class="num">${n}</span>`);
       }
-      t.addEventListener("click", () => { if(swapMode) return swapPick(p.id); openSheet(p.id); showInFolder(p); });
-    }else t.addEventListener("click", () => { if(swapMode) return swapPick(p.id); postMenu(p); showInFolder(p); });
+      t.addEventListener("click", e => { if(gridClick(e, p)) return; openSheet(p.id); showInFolder(p); });
+    }else t.addEventListener("click", e => { if(gridClick(e, p)) return; postMenu(p); showInFolder(p); });
+    tilePan(t, p, renderGrid);
     if(swapSel.includes(p.id)) t.classList.add("swapsel");
     if(p.pinned) t.insertAdjacentHTML("beforeend", '<span class="pin" title="Fixiert"><svg viewBox="0 0 24 24" fill="#fff"><path d="M15 3l6 6-3 1-4 4 1 5-2 2-4-4-5 5-1-1 5-5-4-4 2-2 5 1 4-4z"/></svg></span>');
     if(p.hidden){ t.classList.add("hidden"); t.insertAdjacentHTML("beforeend", '<span class="eye">ausgeblendet</span>'); }
@@ -1156,6 +1204,7 @@ function setupSortable(){
   const touch = {delay: 160, delayOnTouchOnly: true, touchStartThreshold: 4};
   Sortable.create(strip, {...touch, group: {name: "photos", pull: "clone", put: false}, sort: false, animation: 150, draggable: ".ph"});
   gridSort = Sortable.create(grid, {...touch, group: {name: "photos", put: true}, animation: 180, draggable: ".tile", sort: state.view !== "new",
+    filter: e => e.altKey || quickKey(e), preventOnFilter: false,
     onEnd(e){
       if(e.from !== grid || e.oldIndex === e.newIndex || state.view === "new") return;
       const ids = viewPosts().map(p => p.id), [m] = ids.splice(e.oldIndex, 1); ids.splice(e.newIndex, 0, m);
@@ -1764,7 +1813,7 @@ function renderBoard(){
     <div class="chips" id="bPlans"></div>
     <div class="chips"><button id="bSwap" aria-pressed="${boardSwap}">${boardSwap ? (boardSwapSel.length === 2 ? "⇄ Jetzt tauschen" : "Zwei antippen …") : "⇄ Tauschen"}</button>${boardSwap ? '<button id="bSwapX">Fertig</button>' : ""}</div>
     <div class="mgrid" id="bGrid"></div>
-    <p class="bhint">Kachel antippen = Ordner und Karussell dazu öffnen. Foto aus der Mitte hier ablegen = neues Karussell an dieser Stelle. Schieben und Augen gelten nur für die gewählte Planung. „⧉ Neu anfangen“ kopiert sie mit allen Karussells ausgeblendet, die alte bleibt erhalten. Grün = geplant, lila = aus diesem Album.</p>
+    <p class="bhint">Kachel antippen = Ordner und Karussell dazu öffnen. ⌘ + zwei Kacheln anklicken = tauschen, ⌥ + Ziehen = Ausschnitt verschieben. Foto aus der Mitte hier ablegen = neues Karussell an dieser Stelle. Schieben und Augen gelten nur für die gewählte Planung. „⧉ Neu anfangen“ kopiert sie mit allen Karussells ausgeblendet, die alte bleibt erhalten. Grün = geplant, lila = aus diesem Album.</p>
     <button class="minibtn" id="bReset">Auf Instagram zurücksetzen</button>`;
   const pb = c3.querySelector("#bPlans");
   state.layouts.filter(isPlan).forEach(l => {
@@ -1802,13 +1851,18 @@ function renderBoard(){
     if(boardSwapSel.includes(p.id)) d.classList.add("swapsel");
     d.dataset.post = p.id;
     if(p.slides[0]) bg(d, p.slides[0].pid, p.slides[0].fx, p.slides[0].fy);
-    d.onclick = () => {
+    tilePan(d, p, renderBoard);
+    d.onclick = e => {
+      if(e.altKey || Date.now() - panJust < 300) return;
+      if(quickKey(e)){ quickSwap(boardSwapSel, p.id, bl, renderBoard); return; }
+      if(boardSwapSel.length && !boardSwap){ boardSwapSel = []; renderBoard(); }
       if(boardSwap){ boardSwapSel = boardSwapSel.includes(p.id) ? boardSwapSel.filter(x => x !== p.id) : [...boardSwapSel.slice(-1), p.id]; renderBoard(); return; }
       openInBoard(p);
     };
     mg.appendChild(d);
   });
   boardSorts.push(Sortable.create(mg, {...touch, animation: 150, group: {name: "board", pull: false, put: true}, draggable: "div",
+    filter: e => e.altKey || quickKey(e), preventOnFilter: false,
     // Foto aus der Galerie (oder Slide aus einem Karussell) hier ablegen = neues Karussell an genau dieser Stelle
     onAdd(e){
       const pid = e.item.dataset.pid, src = e.from.dataset.post && postById(e.from.dataset.post);
