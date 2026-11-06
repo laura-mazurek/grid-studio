@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="gs-build" content="20261028125235">
+<meta name="gs-build" content="20261106192522">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
 <title>Grid Studio</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -43,9 +43,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 }
 
 /* Kopf */
-.head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 14px 10px}
+.head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 14px 10px}
+.head > div:first-child{min-width:0;flex:1}
 .head h1{font-family:var(--display);font-size:20px;font-weight:700;margin:0;line-height:1.1}
-.head small{display:block;color:var(--muted);font-size:12px;font-weight:500;font-variant-numeric:tabular-nums}
+.head small{display:block;color:var(--muted);font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .seg{display:flex;background:var(--chip);border-radius:10px;padding:3px;font-size:12px;font-weight:600}
 .seg button{border:0;background:none;padding:6px 10px;border-radius:8px;color:var(--muted)}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
@@ -123,7 +124,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .export figcaption a{color:var(--accent);font-weight:600}
 .export .note{font-size:13px;color:var(--muted);padding:0 14px 10px;margin:0}
 .toast{position:absolute;left:50%;bottom:170px;transform:translateX(-50%);background:var(--ink);color:var(--bg);font-size:13px;padding:8px 14px;border-radius:999px;z-index:9;white-space:nowrap;pointer-events:none;max-width:90%;overflow:hidden;text-overflow:ellipsis}
-.headr{display:flex;align-items:center;gap:6px}
+.headr{display:flex;align-items:center;gap:6px;flex:none}
+.albums .sep{flex:none;align-self:center;color:var(--muted);font-size:13px;padding:0 2px}
+.albums button.sub,.chips button.sub{font-weight:500}
+.themes{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.themes button{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 6px;font-size:13px;font-weight:600}
+.themes button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.folderlist{display:grid;gap:6px;max-height:50vh;overflow-y:auto}
 .views{display:flex;gap:6px;overflow-x:auto;padding:0 12px 10px;scrollbar-width:none}
 .views::-webkit-scrollbar{display:none}
 .views button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis}
@@ -132,6 +139,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .dialog .stackbtns{display:grid;gap:6px}
 .dialog a.btn{text-align:center;text-decoration:none;color:var(--ink)}
 .tile.hidden{opacity:.35}
+.tile.swapsel::before,.mgrid div.swapsel::before{content:"";position:absolute;inset:0;border:4px solid var(--accent);z-index:3;pointer-events:none}
+.swapbar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--tray-h,150px) + 12px);z-index:6;display:flex;align-items:center;gap:8px;background:var(--ink);color:var(--bg);border-radius:999px;padding:6px 6px 6px 14px;font-size:13px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.3);white-space:nowrap}
+.swapbar button{border:0;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700;background:var(--bg);color:var(--ink)}
+.swapbar button:disabled{opacity:.4}
+.views .swap[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.flash{animation:flash 1.6s ease-out}
+@keyframes flash{0%,40%{box-shadow:0 0 0 4px var(--accent)}100%{box-shadow:0 0 0 0 transparent}}
+@media (prefers-reduced-motion:reduce){.flash{animation:none;box-shadow:0 0 0 4px var(--accent)}}
 .tile .pin{position:absolute;left:5px;top:5px;width:22px;height:22px;border-radius:50%;background:rgba(18,17,22,.75);display:grid;place-items:center}
 .tile .pin svg{width:13px;height:13px}
 .tile .eye{position:absolute;right:5px;bottom:5px;background:rgba(18,17,22,.75);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px}
@@ -257,6 +272,7 @@ body.boardmode .seg{display:none}
         <button id="modeGrid" aria-pressed="true">Grid</button>
         <button id="modePost" aria-pressed="false">Posting</button>
       </div>
+      <button class="iconbtn" id="setBtn" aria-label="Einstellungen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
       <button class="iconbtn" id="igBtn" aria-label="Instagram-Verbindung"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r=".6" fill="currentColor"/></svg><span class="dot" id="igDot"></span></button>
     </div>
   </div>
@@ -276,7 +292,7 @@ body.boardmode .seg{display:none}
   <div class="tray" id="tray">
     <div class="albums" id="albums"></div>
     <div class="strip" id="strip"></div>
-    <div class="trayfoot"><span id="hint">Foto nach oben ziehen = neuer Post</span><span style="display:flex;gap:12px"><button class="linkbtn" id="addMore" hidden>＋ Fotos hinzufügen</button><button class="linkbtn" id="delAlbum" hidden>Album entfernen</button></span></div>
+    <div class="trayfoot"><span id="hint">Nach oben ziehen = neuer Post</span><span style="display:flex;gap:12px"><button class="linkbtn" id="addMore" hidden>＋ Fotos hinzufügen</button><button class="linkbtn" id="delAlbum" hidden>Ordner bearbeiten</button></span></div>
   </div>
 
   <div class="sheet" id="sheet" aria-hidden="true">
@@ -451,14 +467,17 @@ function orderOf(l){
   state.posts.forEach(p => { if(!seen.has(p.id)) out.push(p); });
   return out;
 }
+// Planungen (Karussell-Planung und ihre Kopien) blenden Karussells pro Planung aus: layout.hide
+const isPlan = l => !!l && (l.id === "board" || l.board);
+function isOffIn(v, p){ const L = v !== "new" && layout(v); return !!(p.hidden || (L && L.hide && L.hide.includes(p.id))); }
 function viewPosts(v = state.view, withHidden = showHidden){
   const base = allViewPosts(v);
   const all = [...base.filter(p => p.pinned).sort((a, b) => b.pinned - a.pinned), ...base.filter(p => !p.pinned)];
-  return withHidden ? all : all.filter(p => !p.hidden);
+  return withHidden ? all : all.filter(p => !isOffIn(v, p));
 }
 // Board-Karussells (scope „board“) erscheinen nur in der Karussell-Planung, bis sie freigegeben werden
 function allViewPosts(v = state.view){
-  const inView = p => !p.scope || p.scope === v;
+  const inView = p => !p.scope || p.scope === v || (p.scope === "board" && isPlan(layout(v)));
   if(v === "new"){
     const planned = orderOf(layout("ig")).filter(p => p.status === "planned" && inView(p));
     return [...planned, ...state.posts.filter(p => p.status !== "planned").sort(byDate)];
@@ -497,6 +516,11 @@ function renderViews(){
     };
     box.appendChild(b);
   });
+  const sw = document.createElement("button");
+  sw.className = "swap"; sw.textContent = "⇄ Tauschen"; sw.setAttribute("aria-pressed", swapMode);
+  sw.title = "Zwei Kacheln antippen und ihre Plätze tauschen";
+  sw.onclick = () => { setSwapMode(!swapMode); };
+  box.appendChild(sw);
   const add = document.createElement("button");
   add.className = "add"; add.textContent = "＋ Version";
   add.onclick = () => {
@@ -560,8 +584,8 @@ function viewDialog(l){
     back.querySelector("form").onsubmit = e => { e.preventDefault(); l.name = name.value.trim() || l.name; save(); renderViews(); close(); };
     back.querySelector("#vReset").onclick = () => { resetToInstagram(l); save(); renderGrid(); close(); toast("Auf Instagram-Reihenfolge zurückgesetzt"); };
     back.querySelector("#vDup").onclick = () => {
-      const c = {id: uid(), name: l.name + " Kopie", order: orderOf(l).map(p => p.id)};
-      state.layouts.push(c); state.view = c.id; save(); renderViews(); renderGrid(); close(); toast(`„${c.name}“ angelegt`);
+      const c = {id: uid(), name: l.name + " Kopie", order: orderOf(l).map(p => p.id), ...(isPlan(l) ? {board: true, hide: [...(l.hide || [])]} : {})};
+      state.layouts.push(c); state.view = c.id; if(isPlan(c)) state.boardPlan = c.id; save(); renderViews(); renderGrid(); close(); toast(`„${c.name}“ angelegt`);
     };
     const del = back.querySelector("#vDel");
     del.onclick = () => {
@@ -655,8 +679,76 @@ async function exportGrid(){
   app.appendChild(ov);
 }
 
+/* ---------- Zwei Kacheln tauschen ---------- */
+let swapMode = false, swapSel = [];
+function setSwapMode(on){
+  swapMode = on; swapSel = [];
+  const old = $("#swapBar"); if(old) old.remove();
+  if(on){
+    if(state.view === "new"){ swapMode = false; toast("In „Neueste zuerst“ geht Tauschen nicht. Bitte eine Version wählen."); renderViews(); return; }
+    const bar = document.createElement("div"); bar.className = "swapbar"; bar.id = "swapBar";
+    bar.style.setProperty("--tray-h", $("#tray").offsetHeight + "px");
+    bar.innerHTML = `<span id="swapTxt">Zwei Kacheln antippen</span><button id="swapGo" disabled>Tauschen</button><button id="swapX">Fertig</button>`;
+    bar.querySelector("#swapGo").onclick = doSwap;
+    bar.querySelector("#swapX").onclick = () => setSwapMode(false);
+    app.appendChild(bar);
+  }
+  renderViews(); renderGrid();
+}
+function swapPick(id){
+  swapSel = swapSel.includes(id) ? swapSel.filter(x => x !== id) : [...swapSel.slice(-1), id];
+  const n = swapSel.length;
+  $("#swapTxt").textContent = n === 2 ? "Bereit zum Tauschen" : n === 1 ? "Noch eine Kachel antippen" : "Zwei Kacheln antippen";
+  $("#swapGo").disabled = n !== 2;
+  renderGrid();
+}
+// Plätze zweier Posts in einer Version tauschen
+function swapIn(l, a, b){
+  const ids = orderOf(l).map(p => p.id), i = ids.indexOf(a), j = ids.indexOf(b);
+  if(i < 0 || j < 0) return false;
+  [ids[i], ids[j]] = [ids[j], ids[i]]; l.order = ids; return true;
+}
+function doSwap(){
+  if(swapSel.length !== 2) return;
+  const [a, b] = swapSel;
+  if(postById(a).pinned || postById(b).pinned) toast("Fixierte Posts bleiben immer oben");
+  swapIn(layout(state.view), a, b);
+  swapSel = []; save(); renderGrid();
+  $("#swapTxt").textContent = "Getauscht ✓ · nächste zwei antippen"; $("#swapGo").disabled = true;
+}
+
+// Zum Ordner des Fotos springen: in der Grid-Ansicht die Leiste, im Board die Galerie
+function folderOf(p){
+  const pid = p.slides[0] && p.slides[0].pid, ph = pid && state.photos[pid];
+  const aid = (p.album && albumById(p.album) && p.album) || (ph && albumById(ph.album) && ph.album);
+  return {aid, pid};
+}
+function showInFolder(p){
+  const {aid, pid} = folderOf(p);
+  if(!aid) return;
+  if(state.current !== aid){ state.current = aid; save(); renderStrip(); }
+  renderAlbums();
+  requestAnimationFrame(() => {
+    const el = strip.querySelector(`.ph[data-pid="${pid}"]`);
+    if(el){ el.scrollIntoView({inline: "center", block: "nearest", behavior: "smooth"}); el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
+  });
+}
+function openInBoard(p){
+  const {aid, pid} = folderOf(p);
+  if(!aid){ toast(p.igId ? "Instagram-Post, liegt in keinem Ordner" : "Dieses Foto liegt in keinem Ordner"); return; }
+  if(state.current !== aid || boardFilter !== "all"){ state.current = aid; boardFilter = "all"; boardSel.clear(); save(); renderBoard(); }
+  requestAnimationFrame(() => {
+    const ph = document.querySelector(`#bPool .bph[data-pid="${pid}"]`);
+    if(ph){ ph.scrollIntoView({block: "center", behavior: "smooth"}); ph.classList.remove("flash"); void ph.offsetWidth; ph.classList.add("flash"); }
+    const row = document.querySelector(`.bslides[data-post="${p.id}"]`);
+    if(row){ const r = row.closest(".crow"); r.scrollIntoView({block: "nearest", behavior: "smooth"}); r.classList.remove("flash"); void r.offsetWidth; r.classList.add("flash"); }
+  });
+}
+
 function renderGrid(){
   if(state.board) renderBoard();
+  const feed = $("#feed"), top = feed.scrollTop;
+  requestAnimationFrame(() => { feed.scrollTop = top; });
   grid.innerHTML = "";
   grid.classList.toggle("posting", postingMode);
   if(!state.posts.length){
@@ -678,8 +770,9 @@ function renderGrid(){
         const n = planned.length - planned.indexOf(p);
         t.insertAdjacentHTML("beforeend", `<span class="num">${n}</span>`);
       }
-      t.addEventListener("click", () => openSheet(p.id));
-    }else t.addEventListener("click", () => postMenu(p));
+      t.addEventListener("click", () => { if(swapMode) return swapPick(p.id); openSheet(p.id); showInFolder(p); });
+    }else t.addEventListener("click", () => { if(swapMode) return swapPick(p.id); postMenu(p); showInFolder(p); });
+    if(swapSel.includes(p.id)) t.classList.add("swapsel");
     if(p.pinned) t.insertAdjacentHTML("beforeend", '<span class="pin" title="Fixiert"><svg viewBox="0 0 24 24" fill="#fff"><path d="M15 3l6 6-3 1-4 4 1 5-2 2-4-4-5 5-1-1 5-5-4-4 2-2 5 1 4-4z"/></svg></span>');
     if(p.hidden){ t.classList.add("hidden"); t.insertAdjacentHTML("beforeend", '<span class="eye">ausgeblendet</span>'); }
     grid.appendChild(t);
@@ -687,28 +780,142 @@ function renderGrid(){
   renderStats();
 }
 
+/* ---------- Ordner (Alben) mit Unterordnern ---------- */
+const albumById = id => state.albums.find(a => a.id === id);
+const subAlbums = id => id ? state.albums.filter(a => a.parent === id) : [];
+const rootOf = id => { const a = albumById(id); return a && a.parent && albumById(a.parent) ? a.parent : id; };
+const albumPath = id => { const a = albumById(id); if(!a) return ""; const p = a.parent && albumById(a.parent); return p ? p.name + " › " + a.name : a.name; };
+// Chips: oben die Hauptordner, beim gewählten dahinter seine Unterordner. Aktiven Chip nochmal antippen = Ordner bearbeiten.
+function albumChips(box, after){
+  const root = rootOf(state.current);
+  const chip = (a, cls) => {
+    const b = document.createElement("button"), active = a.id === state.current;
+    if(cls) b.className = cls;
+    b.textContent = a.name + (active ? " ⋯" : ""); b.setAttribute("aria-pressed", active);
+    b.title = active ? "Ordner umbenennen, Unterordner anlegen oder löschen" : "";
+    b.onclick = () => { if(active) return albumMenu(a); state.current = a.id; boardSel.clear(); save(); after(); };
+    box.appendChild(b);
+  };
+  state.albums.filter(a => !a.parent || !albumById(a.parent)).forEach(a => chip(a));
+  const kids = subAlbums(root);
+  if(root && kids.length){
+    const sep = document.createElement("span"); sep.className = "sep"; sep.textContent = "›"; box.appendChild(sep);
+    kids.forEach(a => chip(a, "sub"));
+  }
+}
 function renderAlbums(){
   const box = $("#albums"); box.innerHTML = "";
-  state.albums.forEach(a => {
-    const b = document.createElement("button");
-    b.textContent = a.name; b.setAttribute("aria-pressed", a.id === state.current);
-    b.onclick = () => { state.current = a.id; save(); renderAlbums(); renderStrip(); };
-    box.appendChild(b);
-  });
+  albumChips(box, () => { renderAlbums(); renderStrip(); });
   const add = document.createElement("button");
   add.className = "add"; add.textContent = "＋ Album";
   add.onclick = () => $("#fileAlbum").click();
   box.appendChild(add);
   $("#addMore").hidden = !state.current;
-  const del = $("#delAlbum"); del.hidden = !state.current; del.textContent = "Album entfernen"; del.classList.remove("warn"); del.dataset.armed = "";
+  $("#delAlbum").hidden = !state.current;
+}
+function askText(title, value, placeholder){
+  return new Promise(res => {
+    const back = document.createElement("div"); back.className = "dialog-back";
+    back.innerHTML = `<form class="dialog"><b></b><input maxlength="40" aria-label="Name"><div class="actions" style="padding:0"><button class="btn primary" type="submit">Speichern</button><button class="btn" type="button">Abbrechen</button></div></form>`;
+    back.querySelector("b").textContent = title;
+    const inp = back.querySelector("input"); inp.value = value || ""; inp.placeholder = placeholder || "";
+    back.querySelector("form").onsubmit = e => { e.preventDefault(); back.remove(); res(inp.value.trim() || null); };
+    back.querySelector("button[type=button]").onclick = () => { back.remove(); res(null); };
+    app.appendChild(back); setTimeout(() => { inp.focus(); inp.select(); }, 50);
+  });
+}
+function refreshAlbums(){ renderAlbums(); renderStrip(); if(state.board) renderBoard(); }
+function deleteAlbum(a){
+  const gone = new Set([a.id, ...subAlbums(a.id).map(c => c.id)]), used = usedIds();
+  for(const id of Object.keys(state.photos)){
+    if(gone.has(state.photos[id].album)){
+      if(used.has(id)) state.photos[id].album = "_kept"; else { delete state.photos[id]; delImg(id); localKeys.delete(id); }
+    }
+  }
+  state.albums = state.albums.filter(x => !gone.has(x.id));
+  if(gone.has(state.current)) state.current = a.parent && albumById(a.parent) ? a.parent : (state.albums[0] ? state.albums[0].id : null);
+  save(); refreshAlbums(); toast("Ordner gelöscht, verplante Fotos bleiben in ihren Posts");
+}
+function albumMenu(a){
+  const kids = subAlbums(a.id), n = albumIds(a.id).length, isSub = !!(a.parent && albumById(a.parent));
+  const back = document.createElement("div"); back.className = "dialog-back";
+  const close = () => back.remove();
+  back.addEventListener("click", e => { if(e.target === back) close(); });
+  back.innerHTML = `<form class="dialog wide"><b>${isSub ? "Unterordner" : "Ordner"} bearbeiten</b>
+    <p id="amInfo"></p>
+    <input id="amName" maxlength="40" aria-label="Name des Ordners">
+    <div class="stackbtns">
+      <button class="btn primary" type="submit">Namen speichern</button>
+      ${isSub ? "" : '<button class="btn" type="button" id="amSub">＋ Unterordner anlegen<small>z. B. Getting Ready, Paar, Party</small></button>'}
+      <button class="btn" type="button" id="amAdd">＋ Fotos hinzufügen</button>
+      <button class="btn warn" type="button" id="amDel">Ordner löschen<small></small></button>
+      <button class="btn" type="button" id="amClose">Schließen</button>
+    </div></form>`;
+  back.querySelector("#amInfo").textContent = `${n} Fotos` + (kids.length ? ` · ${kids.length} Unterordner` : "") + (isSub ? ` · in „${albumById(a.parent).name}“` : "");
+  const name = back.querySelector("#amName"); name.value = a.name;
+  back.querySelector("form").onsubmit = e => { e.preventDefault(); a.name = name.value.trim() || a.name; save(); refreshAlbums(); close(); toast("Umbenannt"); };
+  const sub = back.querySelector("#amSub");
+  if(sub) sub.onclick = async () => {
+    close();
+    const nm = await askText("Neuer Unterordner in „" + a.name + "“", "", "z. B. Getting Ready");
+    if(!nm) return;
+    const c = {id: uid(), name: nm, parent: a.id};
+    state.albums.push(c); state.current = c.id; save(); refreshAlbums();
+    toast(`„${nm}“ angelegt. Fotos per ＋ hinzufügen oder im Board hierher verschieben.`);
+  };
+  back.querySelector("#amAdd").onclick = () => { close(); state.current = a.id; $("#fileAdd").click(); };
+  const del = back.querySelector("#amDel");
+  del.querySelector("small").textContent = kids.length ? `Mit ${kids.length} Unterordnern und ${n} Fotos. Fotos in Posts bleiben erhalten.` : `${n} Fotos. Fotos in Posts bleiben erhalten.`;
+  del.onclick = () => {
+    if(!del.dataset.armed){ del.dataset.armed = "1"; del.firstChild.textContent = "Wirklich löschen? Nochmal tippen"; return; }
+    close(); deleteAlbum(a);
+  };
+  back.querySelector("#amClose").onclick = close;
+  app.appendChild(back);
+}
+// Ausgewählte Fotos in einen anderen Ordner verschieben
+function moveDialog(ids){
+  const back = document.createElement("div"); back.className = "dialog-back";
+  const close = () => back.remove();
+  back.addEventListener("click", e => { if(e.target === back) close(); });
+  back.innerHTML = `<div class="dialog wide"><b>${ids.length} Fotos verschieben nach …</b><div class="folderlist"></div><button class="btn" id="mvClose">Abbrechen</button></div>`;
+  const list = back.querySelector(".folderlist");
+  const tops = state.albums.filter(a => !a.parent || !albumById(a.parent));
+  tops.forEach(t => [t, ...subAlbums(t.id)].forEach(a => {
+    const b = document.createElement("button"); b.className = "btn"; b.textContent = albumPath(a.id);
+    if(a.parent) b.style.marginLeft = "18px";
+    b.onclick = () => {
+      ids.forEach(id => { if(state.photos[id]) state.photos[id].album = a.id; });
+      boardSel.clear(); save(); close(); refreshAlbums(); toast(`${ids.length} Fotos nach „${a.name}“ verschoben`);
+    };
+    list.appendChild(b);
+  }));
+  const nb = document.createElement("button"); nb.className = "btn"; nb.textContent = "＋ Neuer Unterordner in „" + (albumById(rootOf(state.current)) || {}).name + "“";
+  if(state.current) nb.onclick = async () => {
+    close();
+    const nm = await askText("Neuer Unterordner", "", "z. B. Details");
+    if(!nm) return;
+    const c = {id: uid(), name: nm, parent: rootOf(state.current)};
+    state.albums.push(c);
+    ids.forEach(id => { if(state.photos[id]) state.photos[id].album = c.id; });
+    boardSel.clear(); save(); refreshAlbums(); toast(`${ids.length} Fotos in „${nm}“`);
+  };
+  else nb.hidden = true;
+  list.appendChild(nb);
+  back.querySelector("#mvClose").onclick = close;
+  app.appendChild(back);
 }
 
+let stripAlbum = null;
 function renderStrip(){
   if(state.board) renderBoard();
+  const left = stripAlbum === state.current ? strip.scrollLeft : 0;
+  stripAlbum = state.current;
+  requestAnimationFrame(() => { strip.scrollLeft = left; });
   strip.innerHTML = "";
   const ids = albumIds(state.current);
   if(!state.current || !ids.length){
-    strip.innerHTML = `<span class="none">${state.albums.length ? "Album wählen" : "Noch kein Album. Tipp auf „＋ Album“ und wähl deine Fotos aus."}</span>`;
+    strip.innerHTML = `<span class="none">${!state.albums.length ? "Noch kein Album. Tipp auf „＋ Album“ und wähl deine Fotos aus." : state.current ? "Noch keine Fotos hier. Unten „＋ Fotos hinzufügen“." : "Album wählen"}</span>`;
     return;
   }
   const used = usedIds();
@@ -740,7 +947,7 @@ function closeSheet(){
   openPost.caption = $("#caption").value; openPost.when = $("#when").value;
   openPost = null; save();
   const sh = $("#sheet"); sh.classList.remove("open"); sh.setAttribute("aria-hidden", "true");
-  $("#hint").textContent = "Foto nach oben ziehen = neuer Post";
+  $("#hint").textContent = "Nach oben ziehen = neuer Post";
   renderGrid(); renderStrip();
 }
 function renderSheet(){
@@ -806,23 +1013,10 @@ $("#delPost").onclick = e => {
   state.posts = state.posts.filter(p => p !== openPost);
   openPost = null; save();
   $("#sheet").classList.remove("open");
-  $("#hint").textContent = "Foto nach oben ziehen = neuer Post";
+  $("#hint").textContent = "Nach oben ziehen = neuer Post";
   renderGrid(); renderStrip(); toast("Post gelöscht");
 };
-$("#delAlbum").onclick = async e => {
-  const btn = e.currentTarget;
-  if(!state.current) return;
-  if(!btn.dataset.armed){ btn.dataset.armed = "1"; btn.textContent = "Sicher? Nochmal tippen"; btn.classList.add("warn"); return; }
-  const used = usedIds(), gone = state.current;
-  for(const id of Object.keys(state.photos)){
-    if(state.photos[id].album === gone){
-      if(used.has(id)) state.photos[id].album = "_kept"; else { delete state.photos[id]; delImg(id); }
-    }
-  }
-  state.albums = state.albums.filter(a => a.id !== gone);
-  state.current = state.albums[0] ? state.albums[0].id : null;
-  save(); renderAlbums(); renderStrip(); toast("Album entfernt, verplante Fotos bleiben");
-};
+$("#delAlbum").onclick = () => { const a = albumById(state.current); if(a) albumMenu(a); };
 
 /* ---------- Export ---------- */
 function cropBlob(pid, fx, fy){
@@ -913,7 +1107,7 @@ async function newAlbumFrom(files){
   state.albums.push(a); state.current = a.id;
   renderAlbums();
   const ids = await ingest(files, a.id, (i, n) => { $("#hint").textContent = `Fotos werden geladen … ${i}/${n}`; renderStrip(); });
-  $("#hint").textContent = "Foto nach oben ziehen = neuer Post";
+  $("#hint").textContent = "Nach oben ziehen = neuer Post";
   save(); renderStrip(); toast(`${ids.length} Fotos in „${name}“`);
 }
 $("#fileAlbum").addEventListener("change", e => { newAlbumFrom(e.target.files); e.target.value = ""; });
@@ -923,7 +1117,7 @@ async function addToAlbum(files){
   if(!files.length || !a) return;
   toast(`${files.length} Fotos werden zu „${a.name}“ hinzugefügt …`);
   const ids = await ingest(files, a.id, (i, n) => { $("#hint").textContent = `Fotos werden geladen … ${i}/${n}`; });
-  $("#hint").textContent = "Foto nach oben ziehen = neuer Post";
+  $("#hint").textContent = "Nach oben ziehen = neuer Post";
   a.order = [...albumIds(a.id).filter(id => !ids.includes(id)), ...ids];
   save(); renderStrip(); toast(`${ids.length} Fotos hinzugefügt`);
 }
@@ -1015,10 +1209,13 @@ async function igGet(url){
   return j;
 }
 const norm = s => (s || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 40);
+// Titelbild eines Posts: bei Videos (Reels, Karussell mit Video vorne) immer das Vorschaubild, nie die Videodatei
 function coverUrl(m){
   const c = m.children && m.children.data && m.children.data[0];
-  if(m.media_type === "VIDEO") return m.thumbnail_url || m.media_url;
-  return m.media_url || (c && (c.thumbnail_url || c.media_url)) || m.thumbnail_url;
+  const pick = x => x && (x.media_type === "VIDEO" ? x.thumbnail_url : (x.media_url || x.thumbnail_url));
+  const isVideoFile = u => /\.mp4(\?|$)/i.test(u || "");
+  const u = m.thumbnail_url || (m.media_type === "CAROUSEL_ALBUM" ? pick(c) : pick(m)) || pick(c) || m.media_url;
+  return isVideoFile(u) ? ((c && c.thumbnail_url) || m.thumbnail_url || "") : u;
 }
 
 function mergeIg(items, complete){
@@ -1215,15 +1412,16 @@ $("#igBtn").onclick = igDialog;
 
 /* ---------- Board: Hochzeit auf mehrere Karussells aufteilen ---------- */
 // Fotos eines Albums in der gespeicherten Reihenfolge (neue hinten)
+// Ein Ordner zeigt seine eigenen Fotos und darunter die seiner Unterordner
 function albumIds(aid){
   const a = state.albums.find(x => x.id === aid);
   const all = Object.keys(state.photos).filter(id => state.photos[id].album === aid);
-  if(!a || !a.order) return all;
-  const set = new Set(all), out = a.order.filter(id => set.has(id)), seen = new Set(out);
-  all.forEach(id => { if(!seen.has(id)) out.push(id); });
-  return out;
+  let out = all;
+  if(a && a.order){ const set = new Set(all); out = a.order.filter(id => set.has(id)); const seen = new Set(out); all.forEach(id => { if(!seen.has(id)) out.push(id); }); }
+  return [...out, ...subAlbums(aid).flatMap(c => albumIds(c.id))];
 }
 // Jede Reihe ist ein geplanter Post mit album = aktuelles Album. Pool = alle Fotos des Albums.
+let boardSwap = false, boardSwapSel = [];
 let boardFilter = "all", boardSorts = [], boardZoom = "m", colorSort = false, bundleSimilar = false, analyzingNow = false;
 try{ boardZoom = localStorage.getItem("gs-zoom") || "m"; colorSort = localStorage.getItem("gs-color") === "1"; bundleSimilar = localStorage.getItem("gs-bundle") === "1"; }catch(e){}
 
@@ -1279,7 +1477,7 @@ function colorKey(id){
 }
 const ZOOM = {s: [80, 64], m: [110, 86], l: [170, 120], xl: [260, 170]};
 const boardSel = new Set();
-function boardPosts(){ return state.posts.filter(p => p.status === "planned" && p.album && p.album === state.current); }
+function boardPosts(){ const fam = new Set([state.current, ...subAlbums(state.current).map(c => c.id)]); return state.posts.filter(p => p.status === "planned" && p.album && fam.has(p.album)); }
 
 function avgColor(pid, el){
   const ph = state.photos[pid];
@@ -1313,6 +1511,21 @@ function deletePhotos(ids){
   toast(`${ids.length} Fotos gelöscht` + (gone ? `, ${gone} leere Karussells entfernt` : ""));
 }
 
+function curPlan(){
+  let bl = layout(state.boardPlan);
+  if(!isPlan(bl)) bl = layout("board");
+  if(!bl){ bl = {id: "board", name: "Karussell-Planung", order: [], hide: []}; resetToInstagram(bl); state.layouts.push(bl); }
+  if(!state.hideInit){
+    // Bisherige Augen-Einstellungen in die Karussell-Planung übernehmen
+    state.hideInit = true; bl.hide = bl.hide || [];
+    state.posts.forEach(p => { if(p.status === "planned" && p.scope === "board" && p.hidden){ bl.hide.push(p.id); p.hidden = false; } });
+    save();
+  }
+  bl.hide = bl.hide || [];
+  state.boardPlan = bl.id;
+  return bl;
+}
+
 function setBoard(on){
   state.board = !!on; save();
   document.body.classList.toggle("boardmode", state.board);
@@ -1320,7 +1533,7 @@ function setBoard(on){
   ["#views", "#feed", "#tray"].forEach(sel => $(sel).hidden = state.board);
   $("#boardBtn").textContent = state.board ? "← Grid" : "Board";
   if(state.board) renderBoard();
-  else{ boardSorts.forEach(x => x.destroy()); boardSorts = []; renderViews(); renderGrid(); renderStrip(); }
+  else{ boardSorts.forEach(x => x.destroy()); boardSorts = []; renderAlbums(); renderViews(); renderGrid(); renderStrip(); }
 }
 $("#boardBtn").onclick = () => setBoard(!state.board);
 
@@ -1337,8 +1550,12 @@ function dropEmpty(p){
 
 function renderBoard(){
   const box = $("#board");
+  // Beim Neuaufbau an derselben Stelle bleiben
+  const colTop = [...box.querySelectorAll(".bcol")].map(c => c.scrollTop), boxTop = box.scrollTop, rowLeft = {};
+  box.querySelectorAll(".bslides").forEach(l => { rowLeft[l.dataset.post] = l.scrollLeft; });
   boardSorts.forEach(x => x.destroy()); boardSorts = [];
   box.innerHTML = "";
+  const plan = curPlan();
   const z = ZOOM[boardZoom] || ZOOM.m;
   box.style.setProperty("--pw", z[0] + "px"); box.style.setProperty("--sw", z[1] + "px");
   const touch = {delay: 160, delayOnTouchOnly: true, touchStartThreshold: 4};
@@ -1352,8 +1569,9 @@ function renderBoard(){
   rows.forEach(p => {
     const r = document.createElement("div"); r.className = "crow";
     const over = p.slides.length > 20;
-    if(p.hidden) r.classList.add("off");
-    r.innerHTML = `<div class="crow-head"><button class="eyebtn" data-act="eye" aria-label="${p.hidden ? "Im Feed zeigen" : "Im Feed ausblenden"}" title="${p.hidden ? "Ausgeblendet: im Feed nicht sichtbar" : "Im Feed sichtbar"}">${p.hidden
+    const off = isOffIn(plan.id, p);
+    if(off) r.classList.add("off");
+    r.innerHTML = `<div class="crow-head"><button class="eyebtn" data-act="eye" aria-label="${off ? "Im Feed zeigen" : "Im Feed ausblenden"}" title="${off ? "In dieser Planung ausgeblendet" : "In dieser Planung sichtbar"}">${off
           ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l18 18"/><path d="M10.6 6.1A10 10 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-3 3.6M6.6 7.6A17 17 0 0 0 2.5 12S6 18 12 18a9.6 9.6 0 0 0 4.4-1.1"/></svg>'
           : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="3"/></svg>'}</button>
         <input aria-label="Name des Karussells" maxlength="40">
@@ -1386,7 +1604,12 @@ function renderBoard(){
       }
       if(a === "prev") igPreview(p);
       if(a === "big") compareView(p.slides.map(x => x.pid), p.title || "Karussell");
-      if(a === "eye"){ p.hidden = !p.hidden; save(); renderBoard(); toast(p.hidden ? "Im Feed ausgeblendet, bleibt geplant" : "Wieder im Feed"); }
+      if(a === "eye"){
+        const now = isOffIn(plan.id, p);
+        p.hidden = false; plan.hide = plan.hide.filter(id => id !== p.id);
+        if(!now) plan.hide.push(p.id);
+        save(); renderBoard(); toast(!now ? `In „${plan.name}“ ausgeblendet, bleibt geplant` : `In „${plan.name}“ wieder sichtbar`);
+      }
       if(a === "scope"){
         if(p.scope){ p.scope = null; placePost(p); toast("Jetzt in allen Versionen geplant"); }
         else{ p.scope = "board"; toast("Nur noch in der Karussell-Planung"); }
@@ -1435,13 +1658,9 @@ function renderBoard(){
     <div class="selbar" id="bSel"></div>
     <div class="pool" id="bPool"></div>`;
   const ab = c2.querySelector("#bAlbums"), fb = c2.querySelector("#bFilter");
-  state.albums.forEach(a => {
-    const b = document.createElement("button"); b.textContent = a.name; b.setAttribute("aria-pressed", a.id === state.current);
-    b.onclick = () => { state.current = a.id; boardSel.clear(); save(); renderBoard(); };
-    ab.appendChild(b);
-  });
-  if(state.current){ const addF = document.createElement("button"); addF.className = "add"; addF.textContent = "＋ Fotos in dieses Album"; addF.onclick = () => $("#fileAdd").click(); ab.appendChild(addF); }
-  const addA = document.createElement("button"); addA.className = "add"; addA.textContent = "＋ Neues Album"; addA.onclick = () => $("#fileAlbum").click(); ab.appendChild(addA);
+  albumChips(ab, () => renderBoard());
+  if(state.current){ const addF = document.createElement("button"); addF.className = "add"; addF.textContent = "＋ Fotos"; addF.onclick = () => $("#fileAdd").click(); ab.appendChild(addF); }
+  const addA = document.createElement("button"); addA.className = "add"; addA.textContent = "＋ Neuer Ordner"; addA.onclick = () => $("#fileAlbum").click(); ab.appendChild(addA);
   // Kachelgröße
   const zb = document.createElement("span"); zb.className = "chips"; zb.style.marginLeft = "auto";
   [["s", "S"], ["m", "M"], ["l", "L"], ["xl", "XL"]].forEach(([k, label]) => {
@@ -1462,11 +1681,12 @@ function renderBoard(){
   const sb = c2.querySelector("#bSel");
   const shown = ids.filter(id => boardFilter === "all" || (boardFilter === "fav" ? state.photos[id].fav : !used.has(id)));
   sb.innerHTML = boardSel.size
-    ? `<b>${boardSel.size} ausgewählt</b><button class="minibtn go" id="selCmp">Vergleichen</button><button class="minibtn" id="selFav">♥ alle markieren</button><button class="minibtn warn" id="selDel">Aus Album löschen</button><button class="minibtn" id="selClear">Auswahl aufheben</button>`
+    ? `<b>${boardSel.size} ausgewählt</b><button class="minibtn go" id="selCmp">Vergleichen</button><button class="minibtn" id="selFav">♥ alle markieren</button><button class="minibtn" id="selMove">In Ordner verschieben</button><button class="minibtn warn" id="selDel">Aus Album löschen</button><button class="minibtn" id="selClear">Auswahl aufheben</button>`
     : `<span class="bhint">Bild antippen = groß ansehen · ○ = auswählen (Reihenfolge zählt) · ♥ = Favorit · Ziehen = direkt in ein Karussell</span><button class="minibtn" id="selAll">Alle sichtbaren auswählen</button>`;
   if(boardSel.size){
     sb.querySelector("#selClear").onclick = () => { boardSel.clear(); renderBoard(); };
     sb.querySelector("#selCmp").onclick = () => compareView([...boardSel], "Auswahl");
+    sb.querySelector("#selMove").onclick = () => moveDialog([...boardSel]);
     sb.querySelector("#selFav").onclick = () => { boardSel.forEach(id => state.photos[id].fav = true); save(); renderBoard(); };
     const del = sb.querySelector("#selDel");
     del.onclick = () => {
@@ -1520,7 +1740,7 @@ function renderBoard(){
     else d.onclick = () => photoViewer(ordered, ordered.indexOf(id));
     pool.appendChild(d);
   });
-  boardSorts.push(Sortable.create(pool, {...touch, group: {name: "board", pull: "clone", put: true}, sort: !smart, animation: 150,
+  boardSorts.push(Sortable.create(pool, {...touch, group: {name: "board", pull: "clone", put: true}, sort: !smart && !subAlbums(state.current).length, animation: 150,
     onUpdate(e){
       // Reihenfolge der sichtbaren Fotos ändern, ausgefilterte behalten ihren Platz
       const vis = [...shown2], [m] = vis.splice(e.oldIndex, 1); vis.splice(e.newIndex, 0, m);
@@ -1538,26 +1758,79 @@ function renderBoard(){
 
   // --- Spalte 3: Grid-Vorschau
   // Eigene Version „Karussell-Planung“: Schieben hier ändert nur diese, nicht Instagram oder andere Versionen
-  let bl = layout("board");
-  if(!bl){ bl = {id: "board", name: "Karussell-Planung", order: []}; resetToInstagram(bl); state.layouts.push(bl); save(); }
+  const bl = plan;
   const c3 = document.createElement("div"); c3.className = "bcol bprev";
-  c3.innerHTML = `<h2>Im Grid <small>Karussell-Planung</small></h2><div class="mgrid" id="bGrid"></div>
-    <p class="bhint">Kacheln verschieben ändert nur die Version „Karussell-Planung“. Grün = geplant, lila = aus diesem Album. Trennlinien ziehen = Bereiche breiter oder schmaler.</p>
+  c3.innerHTML = `<h2>Im Grid</h2>
+    <div class="chips" id="bPlans"></div>
+    <div class="chips"><button id="bSwap" aria-pressed="${boardSwap}">${boardSwap ? (boardSwapSel.length === 2 ? "⇄ Jetzt tauschen" : "Zwei antippen …") : "⇄ Tauschen"}</button>${boardSwap ? '<button id="bSwapX">Fertig</button>' : ""}</div>
+    <div class="mgrid" id="bGrid"></div>
+    <p class="bhint">Kachel antippen = Ordner und Karussell dazu öffnen. Foto aus der Mitte hier ablegen = neues Karussell an dieser Stelle. Schieben und Augen gelten nur für die gewählte Planung. „⧉ Neu anfangen“ kopiert sie mit allen Karussells ausgeblendet, die alte bleibt erhalten. Grün = geplant, lila = aus diesem Album.</p>
     <button class="minibtn" id="bReset">Auf Instagram zurücksetzen</button>`;
+  const pb = c3.querySelector("#bPlans");
+  state.layouts.filter(isPlan).forEach(l => {
+    const b = document.createElement("button"), active = l.id === bl.id;
+    b.textContent = l.name + (active ? " ⋯" : ""); b.setAttribute("aria-pressed", active);
+    b.onclick = () => { if(active) return viewDialog(l); state.boardPlan = l.id; save(); renderBoard(); };
+    pb.appendChild(b);
+  });
+  const nb = document.createElement("button"); nb.className = "add"; nb.textContent = "⧉ Neu anfangen";
+  nb.title = "Kopie dieser Planung, alle Karussells ausgeblendet";
+  nb.onclick = () => {
+    const n = state.layouts.filter(isPlan).length + 1;
+    const c = {id: uid(), name: "Planung " + n, board: true, order: orderOf(bl).map(p => p.id),
+      hide: state.posts.filter(p => p.status === "planned" && p.scope === "board").map(p => p.id)};
+    state.layouts.push(c); state.boardPlan = c.id; save(); renderBoard();
+    toast(`„${c.name}“ angelegt: alle Karussells ausgeblendet, „${bl.name}“ bleibt unverändert`);
+  };
+  pb.appendChild(nb);
   c3.querySelector("#bReset").onclick = e => {
     const b = e.currentTarget;
     if(!b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "Sicher? Nochmal tippen"; return; }
-    resetToInstagram(bl); save(); renderBoard(); toast("Karussell-Planung zurückgesetzt");
+    resetToInstagram(bl); save(); renderBoard(); toast(`„${bl.name}“ zurückgesetzt`);
   };
   const mg = c3.querySelector("#bGrid");
-  const mlist = viewPosts("board", false).slice(0, 36);
+  const mlist = viewPosts(bl.id, false).slice(0, 36);
+  const sb3 = c3.querySelector("#bSwap");
+  sb3.onclick = () => {
+    if(boardSwap && boardSwapSel.length === 2){ swapIn(bl, ...boardSwapSel); boardSwapSel = []; save(); renderBoard(); toast("Getauscht"); return; }
+    boardSwap = !boardSwap; boardSwapSel = []; renderBoard();
+  };
+  const sbx = c3.querySelector("#bSwapX"); if(sbx) sbx.onclick = () => { boardSwap = false; boardSwapSel = []; renderBoard(); };
   mlist.forEach(p => {
     const d = document.createElement("div");
     if(p.status === "planned") d.className = "planned" + (p.album === state.current ? " mine" : "");
+    if(boardSwapSel.includes(p.id)) d.classList.add("swapsel");
+    d.dataset.post = p.id;
     if(p.slides[0]) bg(d, p.slides[0].pid, p.slides[0].fx, p.slides[0].fy);
+    d.onclick = () => {
+      if(boardSwap){ boardSwapSel = boardSwapSel.includes(p.id) ? boardSwapSel.filter(x => x !== p.id) : [...boardSwapSel.slice(-1), p.id]; renderBoard(); return; }
+      openInBoard(p);
+    };
     mg.appendChild(d);
   });
-  boardSorts.push(Sortable.create(mg, {...touch, animation: 150, onEnd(e){
+  boardSorts.push(Sortable.create(mg, {...touch, animation: 150, group: {name: "board", pull: false, put: true}, draggable: "div",
+    // Foto aus der Galerie (oder Slide aus einem Karussell) hier ablegen = neues Karussell an genau dieser Stelle
+    onAdd(e){
+      const pid = e.item.dataset.pid, src = e.from.dataset.post && postById(e.from.dataset.post);
+      let anchor = mlist[e.newIndex];
+      e.item.remove();
+      // Genauer: Rasterzelle unter Finger bzw. Maus berechnen (Kacheln sind beim Ablegen noch animiert verschoben)
+      const ev = e.originalEvent, pt = ev && (ev.changedTouches ? ev.changedTouches[0] : ev), first = mg.querySelector("div[data-post]");
+      if(pt && pt.clientX != null && first){
+        const rc = mg.getBoundingClientRect(), w = first.offsetWidth + 2, h = first.offsetHeight + 2;
+        const col = Math.min(2, Math.max(0, Math.floor((pt.clientX - rc.left) / w))), row = Math.max(0, Math.floor((pt.clientY - rc.top) / h));
+        anchor = mlist[row * 3 + col];
+      }
+      if(!pid) return renderBoard();
+      if(src){ const i = src.slides.findIndex(x => x.pid === pid); if(i >= 0) src.slides.splice(i, 1); dropEmpty(src); }
+      const np = newCarousel([pid]);
+      const ids = orderOf(bl).map(x => x.id).filter(id => id !== np.id);
+      const at = anchor ? ids.indexOf(anchor.id) : ids.length;
+      ids.splice(at < 0 ? ids.length : at, 0, np.id); bl.order = ids;
+      save(); renderBoard(); toast(`„${np.title}“ angelegt. Weitere Fotos links in die Reihe ziehen.`);
+      requestAnimationFrame(() => { const r = document.querySelector(`.bslides[data-post="${np.id}"]`); if(r) r.closest(".crow").scrollIntoView({block: "nearest", behavior: "smooth"}); });
+    },
+    onEnd(e){
     if(e.oldIndex === e.newIndex) return;
     const ids = mlist.map(p => p.id), [m] = ids.splice(e.oldIndex, 1); ids.splice(e.newIndex, 0, m);
     // Nicht gezeigte (ausgeblendete, weiter unten liegende) behalten ihren Platz
@@ -1587,6 +1860,9 @@ function renderBoard(){
   drag(s1, 1); drag(s2, 3);
 
   box.append(c1, s1, c2, s2, c3);
+  [c1, c2, c3].forEach((c, i) => { if(colTop[i]) c.scrollTop = colTop[i]; });
+  if(boxTop) box.scrollTop = boxTop;
+  box.querySelectorAll(".bslides").forEach(l => { if(rowLeft[l.dataset.post]) l.scrollLeft = rowLeft[l.dataset.post]; });
   renderStats();
 }
 
@@ -1818,7 +2094,8 @@ async function syncPush(){
     // Nur Fotos mitschicken, die auch woanders verfügbar sind
     const out = slimState(state);
     out.photos = Object.fromEntries(Object.entries(out.photos).filter(([, ph]) => ph.album === "_ig" || ph.synced));
-    out.albums = state.albums.filter(a => Object.values(out.photos).some(ph => ph.album === a.id));
+    const hasPh = id => Object.values(out.photos).some(ph => ph.album === id);
+    out.albums = state.albums.filter(a => hasPh(a.id) || subAlbums(a.id).some(c => hasPh(c.id)));
     delete out.board; delete out.current;
     // Schutz: Sind in der Cloud viele Instagram-Posts, hier aber keine, lieber nichts hochladen
     const igHere = out.posts.filter(p => p.igId).length;
@@ -2056,6 +2333,36 @@ async function checkUpdate(){
     }
   }catch(e){}
 }
+
+/* ---------- Darstellung und Einstellungen ---------- */
+function applyTheme(t){
+  if(t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  else document.documentElement.removeAttribute("data-theme");
+}
+let theme = "system";
+try{ theme = localStorage.getItem("gs-theme") || "system"; }catch(e){}
+applyTheme(theme);
+function settingsDialog(){
+  const back = document.createElement("div"); back.className = "dialog-back";
+  const close = () => back.remove();
+  back.addEventListener("click", e => { if(e.target === back) close(); });
+  back.innerHTML = `<div class="dialog wide"><b>Einstellungen</b>
+    <p>Darstellung</p>
+    <div class="themes"><button data-t="system">Automatisch</button><button data-t="light">Hell</button><button data-t="dark">Dunkel</button></div>
+    <div class="stackbtns">
+      <button class="btn" id="stIg">Instagram-Verbindung</button>
+      <button class="btn" id="stSync">Geräte synchronisieren &amp; Sicherungen</button>
+      <button class="btn" id="stClose">Schließen</button>
+    </div></div>`;
+  const mark = () => back.querySelectorAll("[data-t]").forEach(b => b.setAttribute("aria-pressed", b.dataset.t === theme));
+  back.querySelectorAll("[data-t]").forEach(b => b.onclick = () => { theme = b.dataset.t; try{ localStorage.setItem("gs-theme", theme); }catch(e){} applyTheme(theme); mark(); });
+  mark();
+  back.querySelector("#stIg").onclick = () => { close(); igDialog(); };
+  back.querySelector("#stSync").onclick = () => { close(); transferDialog(); };
+  back.querySelector("#stClose").onclick = close;
+  app.appendChild(back);
+}
+$("#setBtn").onclick = settingsDialog;
 
 /* ---------- Start ---------- */
 (async () => {
