@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="gs-build" content="20261107091526">
+<meta name="gs-build" content="20261107153155">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
 <title>Grid Studio</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -1505,6 +1505,9 @@ function albumIds(aid){
 }
 // Jede Reihe ist ein geplanter Post mit album = aktuelles Album. Pool = alle Fotos des Albums.
 let boardSwap = false, boardSwapSel = [];
+const esc = t => String(t).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+// Linke Spalte: Karussells aus diesem Album, alle geplanten oder nur die in der Planung sichtbaren (pro Gerät gemerkt)
+let rowScope = (() => { try{ return localStorage.getItem("gs-row-scope") || "album"; }catch(e){ return "album"; } })();
 let boardFilter = "all", boardSorts = [], boardZoom = "m", colorSort = false, bundleSimilar = false, analyzingNow = false;
 try{ boardZoom = localStorage.getItem("gs-zoom") || "m"; colorSort = localStorage.getItem("gs-color") === "1"; bundleSimilar = localStorage.getItem("gs-bundle") === "1"; }catch(e){}
 
@@ -1647,11 +1650,21 @@ function renderBoard(){
   // --- Spalte 1: Karussells
   const c1 = document.createElement("div"); c1.className = "bcol";
   // Eigene Reihenfolge der Karussells (nur für die Übersicht links, ändert nichts im Grid)
-  const rows = boardPosts().map((p, i) => [p, p.bo != null ? p.bo : 1e6 + i]).sort((a, b) => a[1] - b[1]).map(x => x[0]);
-  c1.innerHTML = `<h2>Karussells <small>${rows.length ? rows.length + " geplant aus diesem Album" : "noch keine"}</small></h2>
+  const scopeSrc = rowScope === "album" ? boardPosts() : state.posts.filter(p => p.status === "planned" && (rowScope === "all" || !isOffIn(plan.id, p)));
+  const rows = scopeSrc.map((p, i) => [p, p.bo != null ? p.bo : 1e6 + i]).sort((a, b) => a[1] - b[1]).map(x => x[0]);
+  const scopeTxt = {album: "aus diesem Album", all: "geplant insgesamt", active: "aktiv in „" + esc(plan.name) + "“"}[rowScope];
+  c1.innerHTML = `<h2>Karussells <small>${rows.length ? rows.length + " " + scopeTxt : "noch keine"}</small></h2>
+    <div class="chips" id="bRowScope"></div>
     <p class="bhint">Bilder aus der Mitte in eine Reihe ziehen. Zwischen Reihen verschieben, zurück in die Mitte ziehen = entfernen. Jede Reihe ist ein geplanter Post im Grid. Am Griff ⠿ ziehen = Karussells für dich ordnen.</p>
     <div class="crows"></div>`;
   const crows = c1.querySelector(".crows");
+  const rs = c1.querySelector("#bRowScope");
+  [["album", "Dieses Album"], ["all", "Alle"], ["active", "Alle aktiven"]].forEach(([k, label]) => {
+    const b = document.createElement("button"); b.textContent = label; b.setAttribute("aria-pressed", rowScope === k);
+    b.title = k === "active" ? `Alle geplanten Karussells, die in „${plan.name}“ nicht ausgeblendet sind` : k === "all" ? "Alle geplanten Karussells aus allen Alben" : "Nur Karussells aus dem gewählten Album";
+    b.onclick = () => { rowScope = k; try{ localStorage.setItem("gs-row-scope", k); }catch(e){} renderBoard(); };
+    rs.appendChild(b);
+  });
   rows.forEach(p => {
     const r = document.createElement("div"); r.className = "crow";
     const over = p.slides.length > 20;
@@ -1662,7 +1675,7 @@ function renderBoard(){
           ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l18 18"/><path d="M10.6 6.1A10 10 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-3 3.6M6.6 7.6A17 17 0 0 0 2.5 12S6 18 12 18a9.6 9.6 0 0 0 4.4-1.1"/></svg>'
           : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="3"/></svg>'}</button>
         <input aria-label="Name des Karussells" maxlength="40">
-        <span class="crow-meta${over ? " warn" : ""}">${p.slides.length} Slides${over ? " · max. 20!" : ""} · ${fmtDate(p.when)}</span>
+        <span class="crow-meta${over ? " warn" : ""}">${p.slides.length} Slides${over ? " · max. 20!" : ""} · ${fmtDate(p.when)}${rowScope !== "album" && p.album && albumById(p.album) ? " · " + esc(albumPath(p.album)) : ""}</span>
         ${boardSel.size ? `<button class="minibtn go" data-act="addsel">＋ ${boardSel.size} ausgewählte</button>` : ""}
         <button class="scope${p.scope ? "" : " all"}" data-act="scope" title="${p.scope ? "Nur in der Karussell-Planung. Tippen = in alle Versionen übernehmen" : "In allen Versionen. Tippen = nur Karussell-Planung"}">${p.scope ? "nur Planung" : "in allen Versionen"}</button>
         <button class="minibtn" data-act="big">Alle groß</button>
