@@ -180,6 +180,8 @@ body.boardmode .seg{display:none}
 .chips .add{border-style:dashed;color:var(--accent)}
 .crow{border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:10px 12px;display:grid;gap:8px}
 .crow-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.crows{display:flex;flex-direction:column;gap:14px}
+.crow .grip{cursor:grab;color:var(--muted);font-size:18px;line-height:1;padding:2px 2px 2px 0;user-select:none;-webkit-user-select:none;touch-action:none}
 .crow-head input{flex:1;min-width:120px;border:0;background:none;font:700 15px var(--display);color:var(--ink);padding:2px 0}
 .crow-head input:focus{outline:none;border-bottom:1.5px solid var(--accent)}
 .crow-meta{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -187,7 +189,7 @@ body.boardmode .seg{display:none}
 .minibtn{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:4px 9px;font-size:12px;font-weight:600}
 .minibtn.go{background:var(--plan);border-color:var(--plan);color:var(--plan-ink)}
 .minibtn.warn{color:var(--danger)}
-.bslides{display:flex;gap:6px;overflow-x:auto;min-height:calc(var(--sw,86px) * 1.25 + 12px);padding:2px 2px 6px;align-items:flex-start}
+.bslides{display:flex;flex-wrap:wrap;gap:6px;min-height:calc(var(--sw,86px) * 1.25 + 12px);padding:2px 2px 6px;align-items:flex-start}
 .bslides:empty::before{content:"Bilder hierher ziehen";color:var(--muted);font-size:12px;align-self:center;padding-left:6px}
 .bs{flex:none;width:var(--sw,86px);cursor:pointer;aspect-ratio:4/5;border-radius:6px;background:var(--chip) center/cover no-repeat;position:relative;cursor:grab;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .bs .n{position:absolute;left:4px;top:4px;background:#fff;color:#1D1B22;font-size:10px;font-weight:700;border-radius:4px;padding:0 4px;font-variant-numeric:tabular-nums}
@@ -1627,15 +1629,19 @@ function renderBoard(){
 
   // --- Spalte 1: Karussells
   const c1 = document.createElement("div"); c1.className = "bcol";
-  const rows = boardPosts();
+  // Eigene Reihenfolge der Karussells (nur für die Übersicht links, ändert nichts im Grid)
+  const rows = boardPosts().map((p, i) => [p, p.bo != null ? p.bo : 1e6 + i]).sort((a, b) => a[1] - b[1]).map(x => x[0]);
   c1.innerHTML = `<h2>Karussells <small>${rows.length ? rows.length + " geplant aus diesem Album" : "noch keine"}</small></h2>
-    <p class="bhint">Bilder aus der Mitte in eine Reihe ziehen. Zwischen Reihen verschieben, zurück in die Mitte ziehen = entfernen. Jede Reihe ist ein geplanter Post im Grid.</p>`;
+    <p class="bhint">Bilder aus der Mitte in eine Reihe ziehen. Zwischen Reihen verschieben, zurück in die Mitte ziehen = entfernen. Jede Reihe ist ein geplanter Post im Grid. Am Griff ⠿ ziehen = Karussells für dich ordnen.</p>
+    <div class="crows"></div>`;
+  const crows = c1.querySelector(".crows");
   rows.forEach(p => {
     const r = document.createElement("div"); r.className = "crow";
     const over = p.slides.length > 20;
     const off = isOffIn(plan.id, p);
     if(off) r.classList.add("off");
-    r.innerHTML = `<div class="crow-head"><button class="eyebtn" data-act="eye" aria-label="${off ? "Im Feed zeigen" : "Im Feed ausblenden"}" title="${off ? "In dieser Planung ausgeblendet" : "In dieser Planung sichtbar"}">${off
+    r.dataset.post = p.id;
+    r.innerHTML = `<div class="crow-head"><span class="grip" title="Ziehen = Reihenfolge ändern" aria-label="Karussell verschieben">⠿</span><button class="eyebtn" data-act="eye" aria-label="${off ? "Im Feed zeigen" : "Im Feed ausblenden"}" title="${off ? "In dieser Planung ausgeblendet" : "In dieser Planung sichtbar"}">${off
           ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l18 18"/><path d="M10.6 6.1A10 10 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-3 3.6M6.6 7.6A17 17 0 0 0 2.5 12S6 18 12 18a9.6 9.6 0 0 0 4.4-1.1"/></svg>'
           : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="3"/></svg>'}</button>
         <input aria-label="Name des Karussells" maxlength="40">
@@ -1685,7 +1691,7 @@ function renderBoard(){
         state.posts = state.posts.filter(x => x !== p); save(); renderBoard(); toast("Karussell gelöscht");
       }
     });
-    boardSorts.push(Sortable.create(list, {...touch, group: "board", animation: 150, draggable: ".bs", direction: "horizontal", filter: ".x", preventOnFilter: false,
+    boardSorts.push(Sortable.create(list, {...touch, group: "board", animation: 150, draggable: ".bs", filter: ".x", preventOnFilter: false,
       onUpdate(e){ const [m] = p.slides.splice(e.oldIndex, 1); p.slides.splice(e.newIndex, 0, m); save(); renderBoard(); },
       onAdd(e){
         const pid = e.item.dataset.pid, src = e.from.dataset.post && postById(e.from.dataset.post);
@@ -1696,8 +1702,14 @@ function renderBoard(){
         p.slides.splice(e.newIndex, 0, sl); save(); renderBoard();
       }
     }));
-    c1.appendChild(r);
+    crows.appendChild(r);
   });
+  boardSorts.push(Sortable.create(crows, {...touch, handle: ".grip", draggable: ".crow", animation: 150, group: "crows",
+    onEnd(e){
+      if(e.oldIndex === e.newIndex) return;
+      [...crows.children].forEach((el, i) => { const q = postById(el.dataset.post); if(q) q.bo = i; });
+      save(); renderBoard();
+    }}));
   const nr = document.createElement("div"); nr.className = "newrow";
   nr.innerHTML = `<span>Bild hierher ziehen = <b>neues Karussell</b></span>${boardSel.size ? `<button class="minibtn go" id="newFromSel">Neues Karussell aus ${boardSel.size} ausgewählten</button>` : ""}`;
   c1.appendChild(nr);
@@ -1853,7 +1865,7 @@ function renderBoard(){
     resetToInstagram(bl); save(); renderBoard(); toast(`„${bl.name}“ zurückgesetzt`);
   };
   const mg = c3.querySelector("#bGrid");
-  const mlist = viewPosts(bl.id, false).slice(0, 36);
+  const mlist = viewPosts(bl.id, false);
   const sb3 = c3.querySelector("#bSwap");
   sb3.onclick = () => {
     if(boardSwap && boardSwapSel.length === 2){ swapIn(bl, ...boardSwapSel); boardSwapSel = []; save(); renderBoard(); toast("Getauscht"); return; }
