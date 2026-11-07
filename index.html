@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="gs-build" content="20261107153155">
+<meta name="gs-build" content="20261107170751">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
 <title>Grid Studio</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -421,7 +421,7 @@ async function ingest(files, album, onProgress){
       const id = uid();
       await putImg(id, {full, thumb}); localKeys.add(id);
       thumbs[id] = URL.createObjectURL(thumb);
-      state.photos[id] = {album, w: im.naturalWidth, h: im.naturalHeight};
+      state.photos[id] = {album, w: im.naturalWidth, h: im.naturalHeight, name: (f.name || "").replace(/\.[^.]+$/, "")};
       ids.push(id);
     }catch(e){ /* Datei übersprungen */ }
     onProgress && onProgress(i, files.length);
@@ -1634,6 +1634,107 @@ function dropEmpty(p){
   state.posts = state.posts.filter(x => x !== p); toast(`„${p.title || "Karussell"}“ war leer und wurde entfernt`);
 }
 
+/* ---------- Bilder herunterladen (Web-Größe, ZIP am Laptop, Teilen am iPhone) ---------- */
+const DL_SIZES = {web: [2000, .86, "Web · 2000 px"], small: [1200, .85, "Klein · 1200 px"], max: [2160, .92, "Maximal · 2160 px"]};
+const slug = t => (t || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/ß/g, "ss").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase();
+function downloadDialog(pids){
+  let size = (() => { try{ return localStorage.getItem("gs-dl-size") || "web"; }catch(e){ return "web"; } })();
+  const named = pids.filter(id => state.photos[id] && state.photos[id].name).length;
+  let naming = named ? "orig" : "own";
+  const back = document.createElement("div"); back.className = "dialog-back";
+  const close = () => back.remove();
+  back.addEventListener("click", e => { if(e.target === back) close(); });
+  back.innerHTML = `<form class="dialog wide"><b>${pids.length} ${pids.length === 1 ? "Bild" : "Bilder"} herunterladen</b>
+    <p>Größe (lange Seite)</p><div class="chips" id="dlSize"></div>
+    <p>Dateinamen</p><div class="chips" id="dlName"></div>
+    <input id="dlBase" maxlength="60" placeholder="z. B. hochzeit-anna-tom" aria-label="Eigener Dateiname">
+    <p class="note" id="dlNote"></p><p class="err" id="dlErr"></p>
+    <div class="actions" style="padding:0"><button class="btn primary" type="submit" id="dlGo">Herunterladen</button><button class="btn" type="button" id="dlX">Abbrechen</button></div></form>`;
+  const base = back.querySelector("#dlBase"); base.value = slug(albumPath(state.current)) || "foto";
+  const draw = () => {
+    const sz = back.querySelector("#dlSize"), nm = back.querySelector("#dlName"); sz.innerHTML = nm.innerHTML = "";
+    Object.entries(DL_SIZES).forEach(([k, v]) => { const b = document.createElement("button"); b.type = "button"; b.textContent = v[2]; b.setAttribute("aria-pressed", size === k); b.onclick = () => { size = k; draw(); }; sz.appendChild(b); });
+    [["orig", "Originalname"], ["own", "Eigener Name"]].forEach(([k, l]) => { const b = document.createElement("button"); b.type = "button"; b.textContent = l; b.setAttribute("aria-pressed", naming === k); b.onclick = () => { naming = k; draw(); }; nm.appendChild(b); });
+    base.hidden = naming !== "own";
+    back.querySelector("#dlNote").textContent = (naming === "own" ? `Wird zu ${base.value || "foto"}-01.jpg, ${base.value || "foto"}-02.jpg …` :
+      named === pids.length ? "Die Dateien behalten ihre Originalnamen." : `${pids.length - named} ${pids.length - named === 1 ? "Bild wurde" : "Bilder wurden"} vor diesem Update importiert, der Originalname ist nicht bekannt. Diese bekommen den Ordnernamen mit Nummer.`)
+      + " Web-Größe passt für die meisten Websites.";
+  };
+  base.addEventListener("input", draw);
+  draw();
+  back.querySelector("#dlX").onclick = close;
+  back.querySelector("form").onsubmit = async e => {
+    e.preventDefault();
+    try{ localStorage.setItem("gs-dl-size", size); }catch(e){}
+    const go = back.querySelector("#dlGo"); go.disabled = true;
+    const own = slug(base.value) || "foto", pad = n => String(n).padStart(String(pids.length).length < 2 ? 2 : String(pids.length).length, "0");
+    const [maxSide, q] = DL_SIZES[size], files = [], usedNames = new Set(), small = [];
+    let n = 0;
+    for(const pid of pids){
+      n++; go.textContent = `Bereite vor … ${n}/${pids.length}`;
+      const blob = await sizedBlob(pid, maxSide, q);
+      if(!blob){ small.push(pid); continue; }
+      const ph = state.photos[pid] || {};
+      let name = naming === "orig" && ph.name ? ph.name : `${own}-${pad(n)}`;
+      let unique = name, k = 2; while(usedNames.has(unique.toLowerCase())) unique = `${name}-${k++}`;
+      usedNames.add(unique.toLowerCase());
+      files.push(new File([blob], unique + ".jpg", {type: "image/jpeg"}));
+    }
+    if(!files.length){ go.disabled = false; go.textContent = "Herunterladen"; back.querySelector("#dlErr").textContent = "Auf diesem Gerät liegen von diesen Bildern nur Vorschaubilder. Bitte am Gerät herunterladen, auf dem du sie importiert hast."; return; }
+    const coarse = matchMedia("(pointer: coarse)").matches;
+    if(coarse && navigator.canShare && navigator.canShare({files})){
+      try{ await navigator.share({files}); }catch(err){ /* abgebrochen */ }
+    }else{
+      const zip = makeZip(files), a = document.createElement("a"), u = URL.createObjectURL(await zip);
+      a.href = u; a.download = (naming === "own" ? own : slug(albumPath(state.current)) || "bilder") + ".zip"; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(u), 60e3);
+    }
+    close();
+    toast(small.length ? `${files.length} heruntergeladen · ${small.length} nur als Vorschau auf diesem Gerät, übersprungen` : `${files.length} ${files.length === 1 ? "Bild" : "Bilder"} heruntergeladen`);
+  };
+  app.appendChild(back);
+}
+// Gespeichertes Foto in Zielgröße; null, wenn auf diesem Gerät nur das Vorschaubild liegt
+async function sizedBlob(pid, maxSide, q){
+  const rec = await getImg(pid);
+  if(!rec || !rec.full) return null;
+  const u = URL.createObjectURL(rec.full);
+  try{
+    const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = u; });
+    const long = Math.max(im.naturalWidth, im.naturalHeight);
+    if(long < 1000) return null;
+    if(long <= maxSide && maxSide >= 2160) return rec.full;
+    const sc = Math.min(1, maxSide / long), c = document.createElement("canvas");
+    c.width = Math.round(im.naturalWidth * sc); c.height = Math.round(im.naturalHeight * sc);
+    const g = c.getContext("2d"); g.imageSmoothingQuality = "high"; g.drawImage(im, 0, 0, c.width, c.height);
+    return await new Promise(r => c.toBlob(r, "image/jpeg", q));
+  }catch(e){ return null; }finally{ URL.revokeObjectURL(u); }
+}
+// Einfache ZIP-Datei ohne Kompression (JPEGs lassen sich ohnehin kaum weiter packen)
+const CRC = (() => { const t = new Uint32Array(256); for(let n = 0; n < 256; n++){ let c = n; for(let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = b => { let c = 0xFFFFFFFF; for(let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+async function makeZip(files){
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  const d = new Date(), dt = ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)), dd = (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate());
+  for(const f of files){
+    const data = new Uint8Array(await f.arrayBuffer()), name = enc.encode(f.name), crc = crc32(data);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+    h.setUint16(10, dt, true); h.setUint16(12, dd, true); h.setUint32(14, crc, true); h.setUint32(18, data.length, true); h.setUint32(22, data.length, true);
+    h.setUint16(26, name.length, true); h.setUint16(28, 0, true);
+    parts.push(h, name, data);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(10, 0, true);
+    c.setUint16(12, dt, true); c.setUint16(14, dd, true); c.setUint32(16, crc, true); c.setUint32(20, data.length, true); c.setUint32(24, data.length, true);
+    c.setUint16(28, name.length, true); c.setUint32(42, off, true);
+    central.push(c, name);
+    off += 30 + name.length + data.length;
+  }
+  const size = central.reduce((s, x) => s + x.byteLength, 0), e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, size, true); e.setUint32(16, off, true);
+  return new Blob([...parts, ...central, e], {type: "application/zip"});
+}
+
 function renderBoard(){
   const box = $("#board");
   // Beim Neuaufbau an derselben Stelle bleiben
@@ -1787,12 +1888,13 @@ function renderBoard(){
   const sb = c2.querySelector("#bSel");
   const shown = ids.filter(id => boardFilter === "all" || (boardFilter === "fav" ? state.photos[id].fav : !used.has(id)));
   sb.innerHTML = boardSel.size
-    ? `<b>${boardSel.size} ausgewählt</b><button class="minibtn go" id="selCmp">Vergleichen</button><button class="minibtn" id="selFav">♥ alle markieren</button><button class="minibtn" id="selMove">In Ordner verschieben</button><button class="minibtn warn" id="selDel">Aus Album löschen</button><button class="minibtn" id="selClear">Auswahl aufheben</button>`
-    : `<span class="bhint">Bild antippen = groß ansehen · ○ = auswählen (Reihenfolge zählt) · ♥ = Favorit · Ziehen = direkt in ein Karussell</span><button class="minibtn" id="selAll">Alle sichtbaren auswählen</button>`;
+    ? `<b>${boardSel.size} ausgewählt</b><button class="minibtn go" id="selCmp">Vergleichen</button><button class="minibtn" id="selFav">♥ alle markieren</button><button class="minibtn" id="selMove">In Ordner verschieben</button><button class="minibtn" id="selDl">⤓ Herunterladen</button><button class="minibtn warn" id="selDel">Aus Album löschen</button><button class="minibtn" id="selClear">Auswahl aufheben</button>`
+    : `<span class="bhint">Bild antippen = groß ansehen · ○ = auswählen (Reihenfolge zählt) · ♥ = Favorit · Ziehen = direkt in ein Karussell</span><button class="minibtn" id="selAll">Alle sichtbaren auswählen</button><button class="minibtn" id="shownDl">⤓ Alle sichtbaren herunterladen</button>`;
   if(boardSel.size){
     sb.querySelector("#selClear").onclick = () => { boardSel.clear(); renderBoard(); };
     sb.querySelector("#selCmp").onclick = () => compareView([...boardSel], "Auswahl");
     sb.querySelector("#selMove").onclick = () => moveDialog([...boardSel]);
+    sb.querySelector("#selDl").onclick = () => downloadDialog([...boardSel]);
     sb.querySelector("#selFav").onclick = () => { boardSel.forEach(id => state.photos[id].fav = true); save(); renderBoard(); };
     const del = sb.querySelector("#selDel");
     del.onclick = () => {
@@ -1807,6 +1909,7 @@ function renderBoard(){
   }else{
     const sa = sb.querySelector("#selAll");
     sa.onclick = () => { shown.forEach(id => boardSel.add(id)); renderBoard(); };
+    sb.querySelector("#shownDl").onclick = () => shown.length ? downloadDialog(shown) : toast("Hier sind gerade keine Bilder");
   }
   const pool = c2.querySelector("#bPool");
   const shown2 = ids.filter(id => boardFilter === "all" || (boardFilter === "fav" ? state.photos[id].fav : !used.has(id)));
