@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="gs-build" content="20261107170751">
+<meta name="gs-build" content="20261107173829">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
 <title>Grid Studio</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -1681,16 +1681,31 @@ function downloadDialog(pids){
       files.push(new File([blob], unique + ".jpg", {type: "image/jpeg"}));
     }
     if(!files.length){ go.disabled = false; go.textContent = "Herunterladen"; back.querySelector("#dlErr").textContent = "Auf diesem Gerät liegen von diesen Bildern nur Vorschaubilder. Bitte am Gerät herunterladen, auf dem du sie importiert hast."; return; }
-    const coarse = matchMedia("(pointer: coarse)").matches;
-    if(coarse && navigator.canShare && navigator.canShare({files})){
-      try{ await navigator.share({files}); }catch(err){ /* abgebrochen */ }
-    }else{
-      const zip = makeZip(files), a = document.createElement("a"), u = URL.createObjectURL(await zip);
-      a.href = u; a.download = (naming === "own" ? own : slug(albumPath(state.current)) || "bilder") + ".zip"; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(u), 60e3);
-    }
-    close();
-    toast(small.length ? `${files.length} heruntergeladen · ${small.length} nur als Vorschau auf diesem Gerät, übersprungen` : `${files.length} ${files.length === 1 ? "Bild" : "Bilder"} heruntergeladen`);
+    // Fertig vorbereitet: Speichern bzw. Teilen braucht einen frischen Klick, sonst blockiert der Browser (v. a. am iPhone)
+    const coarse = matchMedia("(pointer: coarse)").matches, canShare = coarse && navigator.canShare && navigator.canShare({files});
+    go.textContent = "Packe ZIP …";
+    const zip = await makeZip(files), zipName = (naming === "own" ? own : slug(albumPath(state.current)) || "bilder") + ".zip";
+    const saveZip = () => {
+      const a = document.createElement("a"), u = URL.createObjectURL(zip);
+      a.href = u; a.download = zipName; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(u), 120e3);
+    };
+    const info = `${files.length} ${files.length === 1 ? "Bild" : "Bilder"} bereit (${(zip.size / 1048576).toFixed(1)} MB)` + (small.length ? ` · ${small.length} übersprungen, auf diesem Gerät nur als Vorschau` : "");
+    back.querySelector("#dlNote").textContent = info;
+    back.querySelector("#dlErr").textContent = "";
+    go.disabled = false; go.textContent = canShare ? "In Fotos/Dateien sichern" : "ZIP speichern";
+    back.querySelector("form").onsubmit = ev => {
+      ev.preventDefault();
+      if(canShare){
+        navigator.share({files}).then(close).catch(err => {
+          if(err && err.name === "AbortError") return;
+          // Zu viele oder zu große Dateien fürs Teilen-Menü: als ZIP anbieten
+          back.querySelector("#dlErr").textContent = "Teilen ging nicht (" + ((err && err.message) || "zu viele Dateien") + "). Tippe nochmal, dann kommt eine ZIP-Datei.";
+          go.textContent = "ZIP speichern";
+          back.querySelector("form").onsubmit = e2 => { e2.preventDefault(); saveZip(); close(); toast("ZIP gespeichert"); };
+        });
+      }else{ saveZip(); close(); toast(`${files.length} ${files.length === 1 ? "Bild" : "Bilder"} als ZIP gespeichert`); }
+    };
   };
   app.appendChild(back);
 }
