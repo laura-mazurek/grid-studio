@@ -33,6 +33,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 /* Kopf */
 .head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 14px 10px}
 .head > div:first-child{min-width:0;flex:1}
+.brand{display:flex;align-items:center;gap:8px;min-width:0}.brand>div{min-width:0}
+.logo{flex:none;width:30px;height:30px;border-radius:8px;background:#000;color:#fff;display:grid;place-items:center;font:700 19px/1 "Helvetica Neue",Helvetica,"Inter Display",Arial,sans-serif;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
 .head h1{font-family:var(--display);font-size:20px;font-weight:700;margin:0;line-height:1.1}
 .head small{display:block;color:var(--muted);font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .seg{display:flex;background:var(--chip);border-radius:10px;padding:3px;font-size:12px;font-weight:600}
@@ -257,7 +259,7 @@ body.boardmode .seg{display:none}
 
 <div class="shell"><div class="app" id="app">
   <div class="head">
-    <div><h1>Grid Studio</h1><small id="stats">lädt …</small></div>
+    <div class="brand"><span class="logo" aria-hidden="true">G</span><div><h1>Grid Studio</h1><small id="stats">lädt …</small></div></div>
     <div class="headr">
       <button class="headbtn" id="boardBtn">Board</button>
       <div class="seg" role="group" aria-label="Ansicht">
