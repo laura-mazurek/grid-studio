@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="gs-build" content="20261108141456">
+<meta name="gs-build" content="20261108141756">
 <style>:root{padding-top:env(safe-area-inset-top,0px);box-sizing:border-box}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
 <title>Grid Studio</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -78,7 +78,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .tray{position:relative}
 .traytoggle{position:absolute;left:50%;top:-14px;transform:translateX(-50%);z-index:2;width:44px;height:26px;border-radius:13px;border:1px solid var(--line);background:var(--surface);color:var(--muted);display:grid;place-items:center;padding:0;box-shadow:0 2px 8px rgba(0,0,0,.08)}
 .traytoggle svg{width:16px;height:16px;transition:transform .2s}
-.tray.collapsed{padding-top:12px}
+.tray.collapsed{position:absolute;left:0;right:0;bottom:0;height:0;padding:0;border:0;background:none}
+.tray.collapsed .traytoggle{top:auto;bottom:calc(10px + env(safe-area-inset-bottom,0px));box-shadow:0 4px 14px rgba(0,0,0,.18)}
+.app.traycollapsed .feed{padding-bottom:calc(52px + env(safe-area-inset-bottom,0px))}
 .tray.collapsed .albums,.tray.collapsed .strip,.tray.collapsed .trayfoot{display:none}
 .tray.collapsed .traytoggle svg{transform:rotate(180deg)}
 .tray.dropping{outline:2px dashed var(--accent);outline-offset:-6px}
@@ -1206,7 +1208,7 @@ async function newAlbumFrom(files){
 }
 // Fotoleiste unten ein-/ausklappen, damit mehr vom Feed sichtbar ist (pro Gerät gemerkt)
 function setTray(collapsed){
-  $("#tray").classList.toggle("collapsed", collapsed);
+  $("#tray").classList.toggle("collapsed", collapsed); app.classList.toggle("traycollapsed", collapsed);
   const t = $("#trayToggle"); t.setAttribute("aria-expanded", !collapsed); t.setAttribute("aria-label", collapsed ? "Fotoleiste ausklappen" : "Fotoleiste einklappen");
   try{ localStorage.setItem("gs-tray", collapsed ? "0" : "1"); }catch(e){}
 }
