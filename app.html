@@ -61,6 +61,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 
 /* Album-Leiste */
 .tray{border-top:1px solid var(--line);background:var(--surface);padding:8px 0 calc(10px + env(safe-area-inset-bottom,0px))}
+.tray{position:relative}
+.traytoggle{position:absolute;left:50%;top:-14px;transform:translateX(-50%);z-index:2;width:44px;height:26px;border-radius:13px;border:1px solid var(--line);background:var(--surface);color:var(--muted);display:grid;place-items:center;padding:0;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.traytoggle svg{width:16px;height:16px;transition:transform .2s}
+.tray.collapsed{padding-top:12px}
+.tray.collapsed .albums,.tray.collapsed .strip,.tray.collapsed .trayfoot{display:none}
+.tray.collapsed .traytoggle svg{transform:rotate(180deg)}
 .tray.dropping{outline:2px dashed var(--accent);outline-offset:-6px}
 .albums{display:flex;gap:6px;overflow-x:auto;padding:0 12px 8px;scrollbar-width:none}
 .albums::-webkit-scrollbar{display:none}
@@ -284,6 +290,7 @@ body.boardmode .seg{display:none}
   </div>
 
   <div class="tray" id="tray">
+    <button class="traytoggle" id="trayToggle" type="button" aria-label="Fotoleiste einklappen" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
     <div class="albums" id="albums"></div>
     <div class="strip" id="strip"></div>
     <div class="trayfoot"><span id="hint">Nach oben ziehen = neuer Post</span><span style="display:flex;gap:12px"><button class="linkbtn" id="addMore" hidden>＋ Fotos hinzufügen</button><button class="linkbtn" id="delAlbum" hidden>Ordner bearbeiten</button></span></div>
@@ -1001,6 +1008,7 @@ function openSheet(id){
   $("#when").value = openPost.when || "";
   renderSheet();
   const sh = $("#sheet");
+  if($("#tray").classList.contains("collapsed")) setTray(false);
   sh.style.setProperty("--tray-h", $("#tray").offsetHeight + "px");
   sh.classList.add("open", "with-tray"); sh.setAttribute("aria-hidden", "false");
   $("#hint").textContent = "Foto in die Slide-Leiste ziehen = zum Karussell";
@@ -1177,6 +1185,14 @@ async function newAlbumFrom(files){
   $("#hint").textContent = "Nach oben ziehen = neuer Post";
   save(); renderStrip(); toast(`${ids.length} Fotos in „${name}“`);
 }
+// Fotoleiste unten ein-/ausklappen, damit mehr vom Feed sichtbar ist (pro Gerät gemerkt)
+function setTray(collapsed){
+  $("#tray").classList.toggle("collapsed", collapsed);
+  const t = $("#trayToggle"); t.setAttribute("aria-expanded", !collapsed); t.setAttribute("aria-label", collapsed ? "Fotoleiste ausklappen" : "Fotoleiste einklappen");
+  try{ localStorage.setItem("gs-tray", collapsed ? "0" : "1"); }catch(e){}
+}
+$("#trayToggle").onclick = () => setTray(!$("#tray").classList.contains("collapsed"));
+try{ if(localStorage.getItem("gs-tray") === "0") setTray(true); }catch(e){}
 $("#fileAlbum").addEventListener("change", e => { newAlbumFrom(e.target.files); e.target.value = ""; });
 async function addToAlbum(files){
   files = [...files].filter(f => f.type.startsWith("image/"));
