@@ -1820,7 +1820,7 @@ function renderBoard(){
         add.forEach(pid => p.slides.push({pid, fx: .5, fy: .5})); boardSel.clear(); save(); renderBoard();
       }
       if(a === "prev") igPreview(p);
-      if(a === "big") compareView(p.slides.map(x => x.pid), p.title || "Karussell");
+      if(a === "big") compareView(p.slides.map(x => x.pid), p.title || "Karussell", p);
       if(a === "eye"){
         const now = isOffIn(plan.id, p);
         p.hidden = false; plan.hide = plan.hide.filter(id => id !== p.id);
@@ -1892,7 +1892,7 @@ function renderBoard(){
     zb.appendChild(b);
   });
   fb.appendChild(zb);
-  [["all", "Alle"], ["fav", "♥ Favoriten"], ["free", "Unbenutzt"]].forEach(([k, label]) => {
+  [["all", "Alle"], ["fav", "♥ Favoriten"], ["free", "Unbenutzt"], ["used", "Verwendet"]].forEach(([k, label]) => {
     const b = document.createElement("button"); b.textContent = label; b.setAttribute("aria-pressed", boardFilter === k);
     b.onclick = () => { boardFilter = k; renderBoard(); }; fb.appendChild(b);
   });
@@ -1902,7 +1902,7 @@ function renderBoard(){
     b.onclick = () => { set(!get()); renderBoard(); }; fb.appendChild(b);
   });
   const sb = c2.querySelector("#bSel");
-  const shown = ids.filter(id => boardFilter === "all" || (boardFilter === "fav" ? state.photos[id].fav : !used.has(id)));
+  const shown = ids.filter(id => boardFilter === "all" || (boardFilter === "fav" ? state.photos[id].fav : boardFilter === "used" ? used.has(id) : !used.has(id)));
   sb.innerHTML = boardSel.size
     ? `<b>${boardSel.size} ausgewählt</b><button class="minibtn go" id="selCmp">Vergleichen</button><button class="minibtn" id="selFav">♥ alle markieren</button><button class="minibtn" id="selMove">In Ordner verschieben</button><button class="minibtn" id="selDl">⤓ Herunterladen</button><button class="minibtn warn" id="selDel">Aus Album löschen</button><button class="minibtn" id="selClear">Auswahl aufheben</button>`
     : `<span class="bhint">Bild antippen = groß ansehen · ○ = auswählen (Reihenfolge zählt) · ♥ = Favorit · Ziehen = direkt in ein Karussell</span><button class="minibtn" id="selAll">Alle sichtbaren auswählen</button><button class="minibtn" id="shownDl">⤓ Alle sichtbaren herunterladen</button>`;
@@ -1928,7 +1928,7 @@ function renderBoard(){
     sb.querySelector("#shownDl").onclick = () => shown.length ? downloadDialog(shown) : toast("Hier sind gerade keine Bilder");
   }
   const pool = c2.querySelector("#bPool");
-  const shown2 = ids.filter(id => boardFilter === "all" || (boardFilter === "fav" ? state.photos[id].fav : !used.has(id)));
+  const shown2 = ids.filter(id => boardFilter === "all" || (boardFilter === "fav" ? state.photos[id].fav : boardFilter === "used" ? used.has(id) : !used.has(id)));
   if(!state.current) pool.innerHTML = `<p class="bhint">Lade ein Album mit „＋ Album laden“, z. B. alle Bilder einer Hochzeit.</p>`;
   else if(!shown2.length) pool.innerHTML = `<p class="bhint">Keine Bilder für diesen Filter.</p>`;
   // Gruppen bilden: aufeinanderfolgende, sehr ähnliche Bilder (Serien) zusammenfassen; optional nach Farbe sortieren
@@ -2101,12 +2101,13 @@ function renderBoard(){
 }
 
 // Mehrere Bilder groß nebeneinander, z. B. ein ganzes Karussell oder die Auswahl
-function compareView(ids, title){
+function compareView(ids, title, post){
   if(!ids.length) return;
+  ids = [...ids];
   const ov = document.createElement("div"); ov.className = "viewer";
   const cols = ids.length === 1 ? 1 : ids.length <= 4 ? 2 : ids.length <= 9 ? 3 : 4;
   ov.innerHTML = `<div class="vbar"><span class="sp"></span><button class="vbtn" id="cmpClose">Fertig</button></div><div class="cmp" style="grid-template-columns:repeat(${cols},minmax(0,1fr))"></div>
-    <div class="vhint">Bild antippen = einzeln groß · ♥ = Favorit · Esc = schließen</div>`;
+    <div class="vhint">Bild antippen = einzeln groß · ♥ = Favorit${post ? " · Ziehen = Reihenfolge im Karussell ändern" : ""} · Esc = schließen</div>`;
   ov.querySelector(".sp").textContent = `${title} · ${ids.length} Bilder`;
   const box = ov.querySelector(".cmp");
   ids.forEach((id, i) => {
@@ -2115,9 +2116,19 @@ function compareView(ids, title){
     if(thumbs[id]) c.style.backgroundImage = `url("${thumbs[id]}")`;
     fullURL(id).then(u => { if(u) c.style.backgroundImage = `url("${u}")`; });
     c.querySelector(".cf").onclick = e => { e.stopPropagation(); const ph = state.photos[id]; if(!ph) return; ph.fav = !ph.fav; save(); e.target.classList.toggle("on", ph.fav); };
-    c.onclick = () => photoViewer(ids, i);
+    c.dataset.pid = id;
+    c.onclick = () => photoViewer(ids, ids.indexOf(id));
     box.appendChild(c);
   });
+  // Aus einem Karussell geöffnet: Bilder hier verschieben = Reihenfolge der Slides ändern
+  if(post && window.Sortable) Sortable.create(box, {animation: 150, delay: 160, delayOnTouchOnly: true, touchStartThreshold: 4, filter: ".cf", preventOnFilter: false,
+    onEnd(e){
+      if(e.oldIndex === e.newIndex) return;
+      const [m] = post.slides.splice(e.oldIndex, 1); post.slides.splice(e.newIndex, 0, m);
+      ids.splice(0, ids.length, ...post.slides.map(x => x.pid));
+      box.querySelectorAll(".cell .tag").forEach((t, k) => t.textContent = k + 1);
+      save();
+    }});
   const key = e => { if(e.key === "Escape" && !document.querySelector(".viewer .vimg")) close(); };
   const close = () => { ov.remove(); document.removeEventListener("keydown", key); if(state.board) renderBoard(); };
   document.addEventListener("keydown", key);
