@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="gs-build" content="20261108141056">
+<meta name="gs-build" content="20261108141456">
 <style>:root{padding-top:env(safe-area-inset-top,0px);box-sizing:border-box}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
 <title>Grid Studio</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -29,7 +29,8 @@
 :root[data-theme="dark"]{
   --desk:#0E0D11; --bg:#18171C; --surface:#222027; --ink:#F1EEF4; --muted:#A39FAD; --line:#33303A;
   --chip:#2C2932; --accent:#C9A3CD; --plan:#5FB3A0; --plan-ink:#0D1F1B; --frame:#000000; --danger:#F2867E; color-scheme:dark}
-html,body{height:100%}
+html{height:var(--app-h,100%);background:var(--surface)}
+body{height:100%}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;overflow:hidden}
 button{font:inherit;color:inherit;cursor:pointer}
 button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -340,6 +341,9 @@ body.boardmode .seg{display:none}
 (() => {
 "use strict";
 const $ = s => document.querySelector(s);
+// iPhone-Home-Bildschirm: echte Fensterhöhe nehmen, CSS-Höhen sind dort teils zu kurz
+const setAppH = () => document.documentElement.style.setProperty("--app-h", window.innerHeight + "px");
+setAppH(); addEventListener("resize", setAppH); addEventListener("orientationchange", () => setTimeout(setAppH, 300));
 const app = $("#app"), grid = $("#grid"), strip = $("#strip"), slidesEl = $("#slides");
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
